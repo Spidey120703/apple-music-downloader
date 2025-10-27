@@ -78,6 +78,17 @@ setTimeout(() => {
         return ap;
     }
 
+    function compareBuffer(b1, b2, size) {
+        const a1 = new Uint8Array(b1)
+        const a2 = new Uint8Array(b2)
+        for (let i = 0; i < size; i++) {
+            if (a1.at(i) !== a2.at(i)) {
+                return false
+            }
+        }
+        return true
+    }
+
     async function handleConnection(s) {
         // console.log("new connection!");
         while (true) {
@@ -94,7 +105,15 @@ setTimeout(() => {
                 if (size === 0)
                     break;
                 const sample = await s.input.readAll(size);
-                decryptSample(kdContext.readPointer(), 5, sample.unwrap(), sample.unwrap(), sample.byteLength);
+
+                const backup = new ArrayBuffer(size);
+                new Uint8Array(backup).set(new Uint8Array(sample))
+
+                let r = decryptSample(kdContext.readPointer(), 5, sample.unwrap(), sample.unwrap(), sample.byteLength);
+
+                let t = compareBuffer(sample, backup, size)
+                console.log(r, t)
+
                 await s.output.writeAll(sample);
             }
         }

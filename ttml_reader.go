@@ -25,7 +25,7 @@ func extractTTML(ttml string) (string, error) {
 		}
 		for _, p := range div.ChildElements() {
 			if p.Tag != "p" {
-				return ``, errors.New("invalid ttml: unknown tag in div")
+				return ``, errors.New("invalid ttml: unknown tag in body > div")
 			}
 			result.WriteString(p.Text())
 			result.WriteRune('\n')

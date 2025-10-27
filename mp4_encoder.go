@@ -1628,11 +1628,6 @@ func writeMP4(
 			return err
 		}
 
-		_, err = mp4.Marshal(writer, &mp4.Mdat{Data: videoData}, box.Context)
-		if err != nil {
-			return err
-		}
-
 		_, err = mp4.Marshal(writer, &mp4.Mdat{Data: audioData}, box.Context)
 		if err != nil {
 			return err

@@ -5,7 +5,6 @@ import (
 	"downloader/applemusic"
 	"downloader/itunes"
 	"encoding/binary"
-	"encoding/hex"
 	"errors"
 	"io"
 	"math"
@@ -232,7 +231,7 @@ func decryptSample(samples []Sample, song *applemusic.Songs, keys []string) (dec
 			return
 		}
 
-		println(hex.Dump(decrypted))
+		// println(hex.Dump(decrypted))
 
 		decryptedSamples = append(decryptedSamples, decrypted)
 
@@ -242,6 +241,18 @@ func decryptSample(samples []Sample, song *applemusic.Songs, keys []string) (dec
 		}
 	}
 	_, _ = conn.Write([]byte{0, 0, 0, 0, 0})
+
+	//println(bytes.Equal((func() (data []byte) {
+	//	for _, sample := range samples {
+	//		data = append(data, sample.Data...)
+	//	}
+	//	return
+	//})(), (func() (data []byte) {
+	//	for _, sample := range decryptedSamples {
+	//		data = append(data, sample...)
+	//	}
+	//	return
+	//})()))
 
 	return
 }

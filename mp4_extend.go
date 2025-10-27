@@ -17,9 +17,9 @@ type ICodecInfo interface {
 	Samples() []Sample
 }
 
-func PackData(samples [][]byte) (ret []byte) {
-	for _, sample := range samples {
-		ret = append(ret, sample...)
+func PackData(data [][]byte) (ret []byte) {
+	for _, d := range data {
+		ret = append(ret, d...)
 	}
 	return
 }

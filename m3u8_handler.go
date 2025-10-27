@@ -24,7 +24,7 @@ const (
 	DefaultId      = "0"
 )
 
-func isValidKey(uri *m3u8.Key) bool {
+func isValidFairPlayKey(uri *m3u8.Key) bool {
 	if uri.Keyformat != "com.apple.streamingkeydelivery" {
 		return false
 	}
@@ -105,7 +105,7 @@ func handleTrackEnhanceHls(enhancedHlsM3U8Url string) (url string, keys []string
 					break
 				}
 				for _, key := range segment.Keys {
-					if isValidKey(&key) && !slices.Contains(*keys, key.URI) {
+					if isValidFairPlayKey(&key) && !slices.Contains(*keys, key.URI) {
 						Info.Printf("Found URI Key: %s", key.URI)
 						*keys = append(*keys, key.URI)
 					}
@@ -267,7 +267,7 @@ func handleMusicVideoHls(masterM3U8Url string) (metaData map[string]string, vide
 				}
 				urls = append(urls, segment.URI)
 				for _, key := range segment.Keys {
-					if isValidKey(&key) && !slices.Contains(*keys, key.URI) {
+					if isValidFairPlayKey(&key) && !slices.Contains(*keys, key.URI) {
 						Info.Printf("Found URI Key: %s", key.URI)
 						*keys = append(*keys, key.URI)
 					}

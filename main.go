@@ -63,7 +63,7 @@ func downloadSong(m4aPath string, itunesSongInfo *itunes.Song, song *applemusic.
 	return nil
 }
 
-// todo: something wrong with the samples decrypting
+// todo: something wrong with the samples decrypting, video track still cannot decrypt
 func downloadMusicVideo(mp4Path string, hlsPlaylistURL string, itunesMusicVideoInfo *itunes.MusicVideo, song *applemusic.Songs, album *applemusic.Albums, coverData []byte) error {
 	Info.Println(strings.Repeat("=", 128))
 	Info.Printf("Downloading (%d/%d). %s", *song.Attributes.TrackNumber, *album.Attributes.TrackCount, *song.Attributes.Name)
@@ -117,7 +117,7 @@ func downloadMusicVideo(mp4Path string, hlsPlaylistURL string, itunesMusicVideoI
 		return err
 	}
 
-	Info.Println("Start decrypting AVC samples...")
+	Info.Println("Start decrypting AAC samples...")
 	audioSamples, err := decryptSample(videoInfo.AudioSamples(), song, audioKeys)
 	if err != nil {
 		return err
@@ -242,7 +242,7 @@ func downloadAlbum(targetPath string, id string, token string) error {
 
 	}
 
-	for _, track := range album.Relationships.Tracks.Data {
+	for _, track := range album.Relationships.Tracks.Data[19:] {
 		//_ = json.NewEncoder(os.Stdout).Encode(track)
 		discDir := fmt.Sprintf("Disc %d", *track.Attributes.DiscNumber)
 
@@ -305,39 +305,37 @@ func downloadAlbum(targetPath string, id string, token string) error {
 				return err
 			}
 
-		/*
-			case "music-videos":
+		case "music-videos":
 
-				trackName := fmt.Sprintf(
-					"%d. %s.mp4",
-					*track.Attributes.TrackNumber,
-					SanitizePath(*track.Attributes.Name))
-				mp4Path := path.Join(targetPath, artistDir, albumDir, discDir, trackName)
+			trackName := fmt.Sprintf(
+				"%d. %s.mp4",
+				*track.Attributes.TrackNumber,
+				SanitizePath(*track.Attributes.Name))
+			mp4Path := path.Join(targetPath, artistDir, albumDir, discDir, trackName)
 
-				err = os.MkdirAll(path.Dir(mp4Path), os.ModePerm)
-				if err != nil {
-					return err
-				}
+			err = os.MkdirAll(path.Dir(mp4Path), os.ModePerm)
+			if err != nil {
+				return err
+			}
 
-				info, err := GetITunesInfo[itunes.MusicVideo](*track.ID, "song", token)
-				if err != nil {
-					return err
-				}
+			info, err := GetITunesInfo[itunes.MusicVideo](*track.ID, "song", token)
+			if err != nil {
+				return err
+			}
 
-				hlsPlaylistURL, err := GetMusicVideo("1770791066", token)
-				if err != nil {
-					return err
-				}
-				hlsPlaylistURL, err = fixURLParamLanguage(hlsPlaylistURL)
-				if err != nil {
-					return err
-				}
+			hlsPlaylistURL, err := GetMusicVideo("1770791066", token)
+			if err != nil {
+				return err
+			}
+			hlsPlaylistURL, err = fixURLParamLanguage(hlsPlaylistURL)
+			if err != nil {
+				return err
+			}
 
-				err = downloadMusicVideo(mp4Path, hlsPlaylistURL, info, &track, album, coverData)
-				if err != nil {
-					return err
-				}
-		*/
+			err = downloadMusicVideo(mp4Path, hlsPlaylistURL, info, &track, album, coverData)
+			if err != nil {
+				return err
+			}
 
 		default:
 			Warn.Printf("Type '%s' is not available to download", *track.Type)
