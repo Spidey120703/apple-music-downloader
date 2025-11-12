@@ -1,6 +1,8 @@
-package main
+package utils
 
 import (
+	"downloader/consts"
+	"downloader/log"
 	"errors"
 	"io"
 	"net/http"
@@ -32,22 +34,22 @@ func DownloadFile(url string, targetPath string) (string, error) {
 	}
 
 	if IsFileExists(filepath) {
-		Warn.Printf("File already exists: %s", filepath)
+		log.Warn.Printf("File already exists: %s", filepath)
 		return filepath, os.ErrExist
 	}
 
-	Info.Println("Start downloading...")
-	Info.Println("\t", url)
+	log.Info.Println("Start downloading...")
+	log.Info.Println("\t", url)
 
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		return "", err
 	}
 
-	req.Header.Set("User-Agent", UserAgent)
+	req.Header.Set("User-Agent", consts.UserAgent)
 	req.Header.Set("Cache-Control", "no-cache")
-	req.Header.Set("Referer", Referer)
-	req.Header.Set("Origin", Origin)
+	req.Header.Set("Referer", consts.Referer)
+	req.Header.Set("Origin", consts.Origin)
 
 	resp, err := http.DefaultClient.Do(req)
 
@@ -76,7 +78,7 @@ func DownloadFile(url string, targetPath string) (string, error) {
 		return "", err
 	}
 
-	Info.Println("Download finished")
+	log.Info.Println("Download finished")
 
 	return filepath, nil
 }

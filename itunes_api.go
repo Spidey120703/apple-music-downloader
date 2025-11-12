@@ -1,7 +1,9 @@
 package main
 
 import (
-	"downloader/itunes"
+	"downloader/api/applemusic"
+	"downloader/api/itunes"
+	"downloader/consts"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -17,14 +19,14 @@ func getITunesLookup(id string, entity string, token string) (*itunes.LookupResp
 	}
 
 	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("User-Agent", UserAgent)
-	req.Header.Set("Origin", Origin)
-	req.Header.Set("Referer", Referer)
+	req.Header.Set("User-Agent", consts.UserAgent)
+	req.Header.Set("Origin", consts.Origin)
+	req.Header.Set("Referer", consts.Referer)
 
 	query := req.URL.Query()
 	query.Set("id", id)
 	query.Set("entity", entity)
-	query.Set("country", StoreFront)
+	query.Set("country", applemusic.StoreFront)
 	query.Set("lang", "en_us")
 	query.Set("limit", "100")
 	req.URL.RawQuery = query.Encode()

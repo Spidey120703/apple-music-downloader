@@ -2,8 +2,5 @@
 <project version="4">
   <component name="VcsDirectoryMappings">
     <mapping directory="$PROJECT_DIR$" vcs="Git" />
-    <mapping directory="$PROJECT_DIR$/references/github/Apple Lossless Audio Codec/alac" vcs="Git" />
-    <mapping directory="$PROJECT_DIR$/references/github/AtomicParsley/atomicparsley" vcs="Git" />
-    <mapping directory="$PROJECT_DIR$/references/github/Mp3tag Web Sources Scripts/mp3tag-web-sources-scripts" vcs="Git" />
   </component>
 </project>

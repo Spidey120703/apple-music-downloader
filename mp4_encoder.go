@@ -1,9 +1,11 @@
 package main
 
 import (
-	"downloader/applemusic"
-	"downloader/avc"
-	"downloader/itunes"
+	"downloader/api/applemusic"
+	"downloader/api/itunes"
+	"downloader/box_types/avc"
+	"downloader/drm/fairplay"
+	"downloader/log"
 	"encoding/binary"
 	"errors"
 	"io"
@@ -12,7 +14,7 @@ import (
 	"github.com/abema/go-mp4"
 )
 
-type VideoInfo struct {
+type MusicVideoInfo struct {
 	readers struct {
 		video []io.ReadSeeker
 		audio []io.ReadSeeker
@@ -32,48 +34,48 @@ type VideoInfo struct {
 		}
 	}
 	chunk struct {
-		video []Chunk
-		audio []Chunk
+		video []fairplay.Chunk
+		audio []fairplay.Chunk
 	}
 }
 
-func (s *VideoInfo) VideoDuration() (ret uint64) {
+func (s *MusicVideoInfo) VideoDuration() (ret uint64) {
 	for _, chunk := range s.chunk.video {
-		for _, sample := range chunk.samples {
+		for _, sample := range chunk.Samples {
 			ret += uint64(sample.SampleDuration)
 		}
 	}
 	return
 }
 
-func (s *VideoInfo) AudioDuration() (ret uint64) {
+func (s *MusicVideoInfo) AudioDuration() (ret uint64) {
 	for _, chunk := range s.chunk.audio {
-		for _, sample := range chunk.samples {
+		for _, sample := range chunk.Samples {
 			ret += uint64(sample.SampleDuration)
 		}
 	}
 	return
 }
 
-func (s *VideoInfo) VideoSamples() (ret []Sample) {
+func (s *MusicVideoInfo) VideoSamples() (ret []fairplay.Sample) {
 	for _, chunk := range s.chunk.video {
-		for _, sample := range chunk.samples {
+		for _, sample := range chunk.Samples {
 			ret = append(ret, sample)
 		}
 	}
 	return
 }
 
-func (s *VideoInfo) AudioSamples() (ret []Sample) {
+func (s *MusicVideoInfo) AudioSamples() (ret []fairplay.Sample) {
 	for _, chunk := range s.chunk.audio {
-		for _, sample := range chunk.samples {
+		for _, sample := range chunk.Samples {
 			ret = append(ret, sample)
 		}
 	}
 	return
 }
 
-func extractAvc[T io.ReadSeeker](input []T, videoInfo *VideoInfo) error {
+func extractAvc1[T io.ReadSeeker](input []T, videoInfo *MusicVideoInfo) error {
 
 	videoInfo.readers.video = append(videoInfo.readers.video, input[0])
 
@@ -143,7 +145,7 @@ func extractAvc[T io.ReadSeeker](input []T, videoInfo *VideoInfo) error {
 	}
 	trexPayload := trex[0].Payload.(*mp4.Trex)
 
-	// note: extracting samples
+	// note: extracting Samples
 	for _, segment := range input[1:] {
 		videoInfo.readers.video = append(videoInfo.readers.video, segment)
 
@@ -152,14 +154,14 @@ func extractAvc[T io.ReadSeeker](input []T, videoInfo *VideoInfo) error {
 		if err != nil || len(moofs) <= 0 {
 			return err
 		}
-		Info.Printf("Found %d '%s' Boxes", len(moofs), mp4.BoxTypeMoof())
+		log.Info.Printf("Found %d '%s' Boxes", len(moofs), mp4.BoxTypeMoof())
 
 		// Box Path: mdat[]
 		mdats, err := mp4.ExtractBoxWithPayload(segment, nil, mp4.BoxPath{mp4.BoxTypeMdat()})
 		if err != nil || len(mdats) != len(moofs) {
 			return err
 		}
-		Info.Printf("Found %d '%s' Boxes", len(mdats), mp4.BoxTypeMdat())
+		log.Info.Printf("Found %d '%s' Boxes", len(mdats), mp4.BoxTypeMdat())
 
 		for i, moof := range moofs {
 
@@ -190,14 +192,14 @@ func extractAvc[T io.ReadSeeker](input []T, videoInfo *VideoInfo) error {
 			mdatPayloadData := mdats[i].Payload.(*mp4.Mdat).Data
 
 			for _, trun := range truns {
-				var chunk Chunk
+				var chunk fairplay.Chunk
 				for _, entry := range trun.Payload.(*mp4.Trun).Entries {
 					// Priority: `trun` > `tfhd` > `trex`
 					// ISO/IEC 14496-12:
 					// 	- `trun`: Section 8.8.8.1
 					// 	- `tfhd`: Section 8.8.7.1
 
-					sample := Sample{SampleDescriptionIndex: sampleDescriptionIndex}
+					sample := fairplay.Sample{SampleDescriptionIndex: sampleDescriptionIndex}
 
 					sampleSize := func() uint32 {
 						if trun.Payload.CheckFlag(0x200) { // `trun` : sample‐size‐present
@@ -221,7 +223,7 @@ func extractAvc[T io.ReadSeeker](input []T, videoInfo *VideoInfo) error {
 						}
 					}()
 
-					chunk.samples = append(chunk.samples, sample)
+					chunk.Samples = append(chunk.Samples, sample)
 				}
 				videoInfo.chunk.video = append(videoInfo.chunk.video, chunk)
 			}
@@ -233,7 +235,7 @@ func extractAvc[T io.ReadSeeker](input []T, videoInfo *VideoInfo) error {
 	return err
 }
 
-func extractMp4a[T io.ReadSeeker](input []T, videoInfo *VideoInfo) error {
+func extractMp4a[T io.ReadSeeker](input []T, videoInfo *MusicVideoInfo) error {
 	videoInfo.readers.audio = append(videoInfo.readers.audio, input[0])
 
 	// note: extracting alac atom
@@ -278,7 +280,7 @@ func extractMp4a[T io.ReadSeeker](input []T, videoInfo *VideoInfo) error {
 	}
 	trexPayload := trex[0].Payload.(*mp4.Trex)
 
-	// note: extracting samples
+	// note: extracting Samples
 	for _, segment := range input[1:] {
 		videoInfo.readers.audio = append(videoInfo.readers.audio, segment)
 
@@ -287,14 +289,14 @@ func extractMp4a[T io.ReadSeeker](input []T, videoInfo *VideoInfo) error {
 		if err != nil || len(moofs) <= 0 {
 			return err
 		}
-		Info.Printf("Found %d '%s' Boxes", len(moofs), mp4.BoxTypeMoof())
+		log.Info.Printf("Found %d '%s' Boxes", len(moofs), mp4.BoxTypeMoof())
 
 		// Box Path: mdat[]
 		mdats, err := mp4.ExtractBoxWithPayload(segment, nil, mp4.BoxPath{mp4.BoxTypeMdat()})
 		if err != nil || len(mdats) != len(moofs) {
 			return err
 		}
-		Info.Printf("Found %d '%s' Boxes", len(mdats), mp4.BoxTypeMdat())
+		log.Info.Printf("Found %d '%s' Boxes", len(mdats), mp4.BoxTypeMdat())
 
 		for i, moof := range moofs {
 
@@ -325,14 +327,14 @@ func extractMp4a[T io.ReadSeeker](input []T, videoInfo *VideoInfo) error {
 			mdatPayloadData := mdats[i].Payload.(*mp4.Mdat).Data
 
 			for _, trun := range truns {
-				var chunk Chunk
+				var chunk fairplay.Chunk
 				for _, entry := range trun.Payload.(*mp4.Trun).Entries {
 					// Priority: `trun` > `tfhd` > `trex`
 					// ISO/IEC 14496-12:
 					// 	- `trun`: Section 8.8.8.1
 					// 	- `tfhd`: Section 8.8.7.1
 
-					sample := Sample{SampleDescriptionIndex: sampleDescriptionIndex}
+					sample := fairplay.Sample{SampleDescriptionIndex: sampleDescriptionIndex}
 
 					sampleSize := func() uint32 {
 						if trun.Payload.CheckFlag(0x200) { // `trun` : sample‐size‐present
@@ -356,7 +358,7 @@ func extractMp4a[T io.ReadSeeker](input []T, videoInfo *VideoInfo) error {
 						}
 					}()
 
-					chunk.samples = append(chunk.samples, sample)
+					chunk.Samples = append(chunk.Samples, sample)
 				}
 				videoInfo.chunk.audio = append(videoInfo.chunk.audio, chunk)
 			}
@@ -370,7 +372,7 @@ func extractMp4a[T io.ReadSeeker](input []T, videoInfo *VideoInfo) error {
 
 func writeMP4(
 	writer *mp4.Writer,
-	videoInfo *VideoInfo,
+	videoInfo *MusicVideoInfo,
 	itunesSongInfo *itunes.MusicVideo,
 	song *applemusic.Songs,
 	album *applemusic.Albums,
@@ -428,7 +430,7 @@ func writeMP4(
 		}
 	}
 
-	const chunkSize uint32 = 5
+	const chunkSize uint32 = 35
 	videoDuration := videoInfo.VideoDuration()
 	audioDuration := videoInfo.AudioDuration()
 	videoNumSamples := uint32(len(videoInfo.VideoSamples()))
@@ -802,7 +804,7 @@ func writeMP4(
 							var stts mp4.Stts
 
 							// Handle variable sample durations
-							// 	- some samples may differ in duration (e.g., Variable Frame Rate content)
+							// 	- some Samples may differ in duration (e.g., Variable Frame Rate content)
 							for _, sample := range videoInfo.VideoSamples() {
 								if len(stts.Entries) != 0 {
 									last := &stts.Entries[len(stts.Entries)-1]
@@ -1157,7 +1159,7 @@ func writeMP4(
 							var stts mp4.Stts
 
 							// Handle variable sample durations
-							// 	- some samples may differ in duration (e.g., Variable Frame Rate content)
+							// 	- some Samples may differ in duration (e.g., Variable Frame Rate content)
 							for _, sample := range videoInfo.AudioSamples() {
 								if len(stts.Entries) != 0 {
 									last := &stts.Entries[len(stts.Entries)-1]
@@ -1490,7 +1492,7 @@ func writeMP4(
 								return err
 							}
 						}
-						err = AddMeta(mp4.BoxType{'s', 'f', 'I', 'D'}, uint32(GetStoreFrontID(StoreFront)))
+						err = AddMeta(mp4.BoxType{'s', 'f', 'I', 'D'}, uint32(GetStoreFrontID(applemusic.StoreFront)))
 						if err != nil {
 							return err
 						}

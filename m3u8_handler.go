@@ -1,6 +1,8 @@
 package main
 
 import (
+	"downloader/log"
+	"downloader/utils"
 	"errors"
 	"net/http"
 	"path/filepath"
@@ -10,19 +12,35 @@ import (
 	"github.com/Eyevinn/hls-m3u8/m3u8"
 )
 
+/*
+TODO: Due to a bug in this project, this file requires modification.
+
+	[github.io/Eyevinn/hls-m3u8/m3u8/reader.go@v0.6.0:848]
+	func parseExtXMapParameters(parameters string) (*Map, error) {
+		m := Map{}
+		for _, attr := range decodeAttributes(parameters) {
+			switch attr.Key {
+			case "URI":
+				m.URI = deQuote(attr.Val)
+			case "BYTERANGE":
+				// if _, err := fmt.Sscanf(attr.Val, "%d@%d", &m.Limit, &m.Offset); err != nil {
+				if _, err := fmt.Sscanf(deQuote(attr.Val), "%d@%d", &m.Limit, &m.Offset); err != nil { // <========
+					return nil, fmt.Errorf("byterange sub-range length value parsing error: %w", err)
+				}
+			}
+		}
+		return &m, nil
+	}
+*/
+
 func ReadM3U8(url string) (playlist m3u8.Playlist, listType m3u8.ListType, err error) {
 	resp, err := http.Get(url)
 	if err != nil {
 		return
 	}
-	defer CloseQuietly(resp.Body)
+	defer utils.CloseQuietly(resp.Body)
 	return m3u8.DecodeFrom(resp.Body, true)
 }
-
-const (
-	PrefetchKeyUri = "skd://itunes.apple.com/P000000000/s1/e1"
-	DefaultId      = "0"
-)
 
 func isValidFairPlayKey(uri *m3u8.Key) bool {
 	if uri.Keyformat != "com.apple.streamingkeydelivery" {
@@ -49,7 +67,7 @@ var AlacCodecs = []string{
 func handleTrackEnhanceHls(enhancedHlsM3U8Url string) (url string, keys []string, err error) {
 
 	var handleMasterM3U8 = func(m3u8Url string) (uri string, err error) {
-		Info.Printf("Located master playlist (HLS m3u8): %s", m3u8Url)
+		log.Info.Printf("Located master playlist (HLS m3u8): %s", m3u8Url)
 		playlist, listType, err := ReadM3U8(m3u8Url)
 		if err != nil {
 			return
@@ -88,7 +106,7 @@ func handleTrackEnhanceHls(enhancedHlsM3U8Url string) (url string, keys []string
 	}
 
 	var handleMediaM3U8 = func(m3u8Url string, keys *[]string) (uri string, err error) {
-		Info.Printf("Located media playlist (HLS m3u8) URL: %s", m3u8Url)
+		log.Info.Printf("Located media playlist (HLS m3u8) URL: %s", m3u8Url)
 		playlist, listType, err := ReadM3U8(m3u8Url)
 		if err != nil {
 			return
@@ -106,7 +124,7 @@ func handleTrackEnhanceHls(enhancedHlsM3U8Url string) (url string, keys []string
 				}
 				for _, key := range segment.Keys {
 					if isValidFairPlayKey(&key) && !slices.Contains(*keys, key.URI) {
-						Info.Printf("Found URI Key: %s", key.URI)
+						log.Info.Printf("Found URI Key: %s", key.URI)
 						*keys = append(*keys, key.URI)
 					}
 				}
@@ -132,14 +150,14 @@ func handleTrackEnhanceHls(enhancedHlsM3U8Url string) (url string, keys []string
 	}
 	url = baseUrl + mp4Uri
 
-	Info.Printf("Located media URL: %s", url)
+	log.Info.Printf("Located media URL: %s", url)
 	return
 }
 
 func handleVideoM3U8(videoM3U8Url string) (url string, err error) {
 
 	var handleMasterM3U8 = func(m3u8Url string) (uri string, err error) {
-		Info.Printf("Located master playlist (HLS m3u8) URL: %s", m3u8Url)
+		log.Info.Printf("Located master playlist (HLS m3u8) URL: %s", m3u8Url)
 		playlist, listType, err := ReadM3U8(m3u8Url)
 		if err != nil {
 			return
@@ -163,7 +181,7 @@ func handleVideoM3U8(videoM3U8Url string) (url string, err error) {
 	}
 
 	var handleMediaM3U8 = func(m3u8Url string) (uri string, err error) {
-		Info.Printf("Located media playlist (HLS m3u8) URL: %s", m3u8Url)
+		log.Info.Printf("Located media playlist (HLS m3u8) URL: %s", m3u8Url)
 		playlist, listType, err := ReadM3U8(m3u8Url)
 		if err != nil {
 			return
@@ -197,14 +215,19 @@ func handleVideoM3U8(videoM3U8Url string) (url string, err error) {
 
 	url = baseUrl + mp4Uri
 
-	Info.Printf("Located media URL: %s", url)
+	log.Info.Printf("Located media URL: %s", url)
 	return
 }
 
-func handleMusicVideoHls(masterM3U8Url string) (metaData map[string]string, videoUrls []string, audioUrls []string, videoKeys []string, audioKeys []string, err error) {
+type TrackHlsInfo struct {
+	Urls []string
+	Keys map[string][]string
+}
+
+func handleMusicVideoHls(masterM3U8Url string) (metaData map[string]string, videoInfo TrackHlsInfo, audioInfo TrackHlsInfo, err error) {
 
 	var handleMasterM3U8 = func(m3u8Url string) (videoUri string, audioUri string, meta map[string]string, err error) {
-		Info.Printf("Located master playlist (HLS m3u8) URL: %s", m3u8Url)
+		log.Info.Printf("Located master playlist (HLS m3u8) URL: %s", m3u8Url)
 		playlist, listType, err := ReadM3U8(m3u8Url)
 		if err != nil {
 			return
@@ -247,8 +270,8 @@ func handleMusicVideoHls(masterM3U8Url string) (metaData map[string]string, vide
 		return
 	}
 
-	var handleMediaM3U8 = func(m3u8Url string, keys *[]string) (urls []string, err error) {
-		Info.Printf("Located media playlist (HLS m3u8) URL: %s", m3u8Url)
+	var handleMediaM3U8 = func(m3u8Url string, keys *map[string][]string) (urls []string, err error) {
+		log.Info.Printf("Located media playlist (HLS m3u8) URL: %s", m3u8Url)
 		playlist, listType, err := ReadM3U8(m3u8Url)
 		if err != nil {
 			return
@@ -267,10 +290,8 @@ func handleMusicVideoHls(masterM3U8Url string) (metaData map[string]string, vide
 				}
 				urls = append(urls, segment.URI)
 				for _, key := range segment.Keys {
-					if isValidFairPlayKey(&key) && !slices.Contains(*keys, key.URI) {
-						Info.Printf("Found URI Key: %s", key.URI)
-						*keys = append(*keys, key.URI)
-					}
+					log.Info.Printf("Found URI Key: (%s) %s", key.Keyformat, key.URI)
+					(*keys)[key.Keyformat] = append((*keys)[key.Keyformat], key.URI)
 				}
 			}
 		}
@@ -289,21 +310,23 @@ func handleMusicVideoHls(masterM3U8Url string) (metaData map[string]string, vide
 	var baseUrl string
 
 	baseUrl, _ = filepath.Split(videoM3U8Uri)
-	videoUrls, err = handleMediaM3U8(videoM3U8Uri, &videoKeys)
+	videoInfo.Keys = make(map[string][]string)
+	videoUrls, err := handleMediaM3U8(videoM3U8Uri, &videoInfo.Keys)
 	if err != nil {
 		return
 	}
-	for i, url := range videoUrls {
-		videoUrls[i] = baseUrl + url
+	for _, url := range videoUrls {
+		videoInfo.Urls = append(videoInfo.Urls, baseUrl+url)
 	}
 
 	baseUrl, _ = filepath.Split(audioM3U8Uri)
-	audioUrls, err = handleMediaM3U8(audioM3U8Uri, &audioKeys)
+	audioInfo.Keys = make(map[string][]string)
+	audioUrls, err := handleMediaM3U8(audioM3U8Uri, &audioInfo.Keys)
 	if err != nil {
 		return
 	}
-	for i, url := range audioUrls {
-		audioUrls[i] = baseUrl + url
+	for _, url := range audioUrls {
+		audioInfo.Urls = append(audioInfo.Urls, baseUrl+url)
 	}
 
 	return

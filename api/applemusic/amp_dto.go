@@ -273,3 +273,16 @@ type RecordLabels struct {
 		URL  *string `json:"url"`
 	} `json:"attributes,omitempty"`
 }
+
+type Lyrics struct {
+	Resource
+	Attributes *struct {
+		PlayParams *struct {
+			CatalogID   *string `json:"catalogId,omitempty"`
+			DisplayType *int    `json:"displayType,omitempty"`
+			ID          *string `json:"id,omitempty"`
+			Kind        *string `json:"kind,omitempty"`
+		} `json:"playParams,omitempty"`
+		Ttml *string `json:"ttml,omitempty"`
+	} `json:"attributes,omitempty"`
+}

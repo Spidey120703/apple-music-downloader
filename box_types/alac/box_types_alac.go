@@ -2,6 +2,17 @@ package alac
 
 import "github.com/abema/go-mp4"
 
+/*
+TODO: This project needs a new Context to distinguish between duplicated BoxType in SampleEntry.
+
+	[github.com/abema/go-mp4/box_info.go@v1.4.1:11]
+	type mp4.Context struct {
+		...
+		// ADD: UnderStsd represents whether current box is under the stsd box
+		UnderStsd bool
+	}
+*/
+
 // Alac - ALACSpecificConfig https://github.com/macosforge/alac/blob/master/codec/ALACAudioTypes.h#L162
 type Alac struct {
 	mp4.FullBox `mp4:"0,extend"`

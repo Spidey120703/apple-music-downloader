@@ -1,24 +1,18 @@
-package main
+package applemusic
 
 import (
 	"bytes"
-	"downloader/applemusic"
+	"downloader/consts"
+	"downloader/utils"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
-	"net/url"
-	"os"
-	"path"
 	"regexp"
-	"strconv"
-	"strings"
 )
 
 const StoreFront = "cn"
-const UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36"
-const Origin = "https://beta.music.apple.com"
-const Referer = "https://beta.music.apple.com/"
 const MediaUserToken = "Ai00hPjqDQcpdKvILsHxXWeJLNt2miOjjBe7cgSI0uIpZu0U90Fu7DQsovYaMHU+p+gJyOHUKfgA2vbGN19XbGy40oWwO3u+46cEucIzORDAuTaPQsrBvMZidhP2krg5QhPW3jYXuFgK2xUaFWrZ45jrun0MX4KeD3G/Lck8cwACZ+5BHeh4V65fpcTjLa6Sm8Uy7Na+R6bse+iBiuvgnVkirt1FmQdVK22RfyXAX7uJYpaAgw=="
 
 func GetToken() (string, error) {
@@ -28,13 +22,13 @@ func GetToken() (string, error) {
 		return "", err
 	}
 
-	defer CloseQuietly(resp.Body)
+	defer utils.CloseQuietly(resp.Body)
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", err
 	}
 
-	regex := regexp.MustCompile(`src="(/assets/index-(?:legacy-)?[0-9a-f]{8}\.js)"`)
+	regex := regexp.MustCompile(`src="(/assets/index-legacy[-~][0-9a-f]{8,10}\.js)"`)
 	submatcheds := regex.FindAllSubmatch(body, 2)
 
 	var token = ""
@@ -69,7 +63,7 @@ func GetToken() (string, error) {
 	return token, nil
 }
 
-func GetAlbumData(id string, token string) (*applemusic.Albums, error) {
+func GetAlbumData(id string, token string) (*Albums, error) {
 	req, err := http.NewRequest(
 		http.MethodGet,
 		"https://amp-api.music.apple.com/v1/catalog/"+StoreFront+"/albums/"+id,
@@ -78,9 +72,9 @@ func GetAlbumData(id string, token string) (*applemusic.Albums, error) {
 		return nil, err
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("User-Agent", UserAgent)
-	req.Header.Set("Origin", Origin)
-	req.Header.Set("Referer", Referer)
+	req.Header.Set("User-Agent", consts.UserAgent)
+	req.Header.Set("Origin", consts.Origin)
+	req.Header.Set("Referer", consts.Referer)
 
 	query := req.URL.Query()
 	query.Set("extend", "artistBio,bornOrFormed,editorialArtwork,editorialNotes,editorialVideo,extendedAssetUrls,hero,isGroup,offers,origin,plainEditorialNotes,seoDescription,seoTitle,artistUrl,contentRating")
@@ -100,7 +94,7 @@ func GetAlbumData(id string, token string) (*applemusic.Albums, error) {
 	}
 
 	data := new(struct {
-		Data []applemusic.Albums `json:"data,omitempty"`
+		Data []Albums `json:"data,omitempty"`
 	})
 
 	err = json.NewDecoder(do.Body).Decode(&data)
@@ -126,9 +120,9 @@ func GetLyrics(id string, token string) (string, error) {
 		return "", err
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("User-Agent", UserAgent)
-	req.Header.Set("Origin", Origin)
-	req.Header.Set("Referer", Referer)
+	req.Header.Set("User-Agent", consts.UserAgent)
+	req.Header.Set("Origin", consts.Origin)
+	req.Header.Set("Referer", consts.Referer)
 	req.Header.Set("Media-User-Token", MediaUserToken)
 
 	do, err := http.DefaultClient.Do(req)
@@ -137,29 +131,17 @@ func GetLyrics(id string, token string) (string, error) {
 	}
 
 	var data struct {
-		Data []struct {
-			ID         string `json:"id,omitempty"`
-			Type       string `json:"type,omitempty"`
-			Attributes struct {
-				PlayParams struct {
-					CatalogID   string `json:"catalogId,omitempty"`
-					DisplayType int    `json:"displayType,omitempty"`
-					ID          string `json:"id,omitempty"`
-					Kind        string `json:"kind,omitempty"`
-				} `json:"playParams,omitempty"`
-				Ttml string `json:"ttml,omitempty"`
-			} `json:"attributes,omitempty"`
-		} `json:"Data,omitempty"`
+		Data []Lyrics `json:"Data,omitempty"`
 	}
 
-	defer CloseQuietly(do.Body)
+	defer utils.CloseQuietly(do.Body)
 
 	err = json.NewDecoder(do.Body).Decode(&data)
 	if err != nil {
 		return "", err
 	}
 
-	return data.Data[0].Attributes.Ttml, nil
+	return *data.Data[0].Attributes.Ttml, nil
 }
 
 func GetSyllableLyrics(id string, token string) (string, string, error) {
@@ -171,9 +153,9 @@ func GetSyllableLyrics(id string, token string) (string, string, error) {
 		return "", "", err
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("User-Agent", UserAgent)
-	req.Header.Set("Origin", Origin)
-	req.Header.Set("Referer", Referer)
+	req.Header.Set("User-Agent", consts.UserAgent)
+	req.Header.Set("Origin", consts.Origin)
+	req.Header.Set("Referer", consts.Referer)
 	req.Header.Set("Media-User-Token", MediaUserToken)
 
 	query := req.URL.Query()
@@ -204,7 +186,7 @@ func GetSyllableLyrics(id string, token string) (string, string, error) {
 		} `json:"Data,omitempty"`
 	}
 
-	defer CloseQuietly(do.Body)
+	defer utils.CloseQuietly(do.Body)
 
 	err = json.NewDecoder(do.Body).Decode(&data)
 	if err != nil {
@@ -214,85 +196,11 @@ func GetSyllableLyrics(id string, token string) (string, string, error) {
 	return data.Data[0].Attributes.Ttml, data.Data[0].Attributes.TtmlLocalizations, nil
 }
 
-func ReadCover(data applemusic.Artwork, coverPath string) ([]byte, error) {
-	coverPath, err := DownloadArtwork(data, coverPath)
-	if err != nil {
-		return nil, err
-	}
-
-	file, err := os.Open(coverPath)
-	if err != nil {
-		return nil, err
-	}
-	defer CloseQuietly(file)
-
-	return io.ReadAll(file)
-}
-
-func DownloadArtwork(data applemusic.Artwork, artworkPath string) (string, error) {
-	URL := *data.URL
-	URL = strings.Replace(URL, "{w}", strconv.Itoa(*data.Width), 1)
-	URL = strings.Replace(URL, "{h}", strconv.Itoa(*data.Height), 1)
-
-	splited := strings.Split(URL, "/")
-	ext := path.Ext(splited[len(splited)-2])
-	URL = URL[:strings.LastIndexByte(URL, '.')] + ext
-	artworkPath = artworkPath + ext
-
-	_, err := DownloadFile(URL, artworkPath)
-	if err != nil && !os.IsExist(err) {
-		return "", err
-	}
-	return artworkPath, nil
-}
-
-func DownloadMotionVideo(data applemusic.MotionVideo, videoPath string) (string, string, error) {
-	previewPath, err := DownloadArtwork(*data.PreviewFrame, videoPath)
-	if err != nil {
-		return "", "", err
-	}
-
-	videoUrl, err := handleVideoM3U8(*data.Video)
-	if err != nil {
-		return previewPath, "", err
-	}
-
-	videoPath, err = DownloadFile(videoUrl, videoPath+".mp4")
-
-	return previewPath, videoPath, nil
-}
-
-type WebPlaybackResponse struct {
-	SongList []struct {
-		HlsKeyCertURL  string `json:"hls-key-cert-url"`
-		HlsPlaylistURL string `json:"hls-playlist-url"`
-		ArtworkUrls    struct {
-			Default struct {
-				URL string `json:"url"`
-			} `json:"default"`
-			Default2X struct {
-				URL string `json:"url"`
-			} `json:"default@2x"`
-			ImageType string `json:"image-type"`
-		} `json:"artwork-urls"`
-		Assets          []interface{} `json:"assets"`
-		WidevineCertURL string        `json:"widevine-cert-url"`
-		FormerIds       []int         `json:"formerIds"`
-		SongID          string        `json:"songId"`
-		IsItunesStream  bool          `json:"is-itunes-stream"`
-		HlsKeyServerURL string        `json:"hls-key-server-url"`
-	} `json:"songList"`
-	Status int `json:"status"`
-}
-type WebPlaybackRequest struct {
-	SalableAdamId string `json:"salableAdamId"`
-}
-
-func GetMusicVideo(id string, token string) (string, error) {
+func GetWebPlayback(id string, token string) (*WebPlaybackSong, error) {
 	reqBody := WebPlaybackRequest{SalableAdamId: id}
 	reqBodyBytes, err := json.Marshal(reqBody)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	req, err := http.NewRequest(
@@ -300,39 +208,64 @@ func GetMusicVideo(id string, token string) (string, error) {
 		"https://play.music.apple.com/WebObjects/MZPlay.woa/wa/webPlayback",
 		bytes.NewBuffer(reqBodyBytes))
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("User-Agent", UserAgent)
-	req.Header.Set("Origin", Origin)
-	req.Header.Set("Referer", Referer)
+	req.Header.Set("User-Agent", consts.UserAgent)
+	req.Header.Set("Origin", consts.Origin)
+	req.Header.Set("Referer", consts.Referer)
 	req.Header.Set("X-Apple-Music-User-Token", MediaUserToken)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	data := new(WebPlaybackResponse)
 	err = json.NewDecoder(resp.Body).Decode(&data)
 
 	if len(data.SongList) < 1 {
-		return "", errors.New("song not found")
+		return nil, errors.New("song not found")
 	}
 
-	return data.SongList[0].HlsPlaylistURL, nil
+	return &data.SongList[0], nil
 }
 
-func fixURLParamLanguage(playlistURL string) (string, error) {
-	parse, err := url.Parse(playlistURL)
+func PostWebPlaybackLicense(url string, licenseRequest WebPlaybackLicenseRequest, token string) ([]byte, error) {
+	body, err := json.Marshal(licenseRequest)
 	if err != nil {
-		return playlistURL, err
+		return nil, err
 	}
-	query := parse.Query()
-	query.Set("l", "en")
-	parse.RawQuery = query.Encode()
 
-	return parse.String(), nil
+	req, err := http.NewRequest(http.MethodPost, url, bytes.NewBuffer(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("X-Apple-Music-User-Token", MediaUserToken)
+
+	do, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	response, err := io.ReadAll(do.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var licenseResponse WebPlaybackLicenseResponse
+	err = json.Unmarshal(response, &licenseResponse)
+	if err != nil {
+		return nil, err
+	}
+
+	if licenseResponse.Status != 0 || licenseResponse.ErrorCode != 0 {
+		return nil, errors.New("something wrong during WebPlayback licensing")
+	}
+
+	return base64.StdEncoding.DecodeString(licenseResponse.License)
 }
