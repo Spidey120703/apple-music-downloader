@@ -6,7 +6,6 @@ import (
 	"downloader/mp4/cmaf"
 	"encoding/binary"
 	"errors"
-	"os"
 	"reflect"
 
 	"github.com/Spidey120703/go-mp4"
@@ -389,19 +388,4 @@ func (m *Metadata) Attach(root *boxtree.BoxNode) (err error) {
 		return
 	}
 	return
-}
-
-func main_() {
-	file, _ := os.Create("a.bin")
-	defer file.Close()
-	t := "Title"
-	metadata := Metadata{
-		Title:      &t,
-		DiskNumber: &Disk{1, 2},
-		Cover:      []byte{0xff, 0xd8, 0xff, 0xe0, 0xff, 0xd9},
-	}
-	err := metadata.Marshal(mp4.NewWriter(file))
-	if err != nil {
-		panic(err)
-	}
 }

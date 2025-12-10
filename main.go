@@ -350,24 +350,3 @@ func main() {
 		panic(err)
 	}
 }
-
-func main1() {
-	applemusic.RefreshToken()
-	ID := "1446009426"
-
-	webPlayback, err := applemusic.GetWebPlayback(ID)
-	if err != nil {
-		panic(err)
-	}
-
-	hls := hlsutils.NewHTTPLiveStream(hlsutils.HLSParameters{
-		Type:        hlsutils.MediaTypeMusicVideo,
-		WebPlayback: webPlayback,
-		TempDir:     config.TempPath,
-		TargetPath:  path.Join(config.TempPath, "a.m4v"),
-		IsEncrypted: true,
-	})
-	if err = hls.Execute(); err != nil {
-		panic(err)
-	}
-}

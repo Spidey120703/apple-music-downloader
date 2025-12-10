@@ -3,7 +3,6 @@ package boxtree
 import (
 	"errors"
 	"io"
-	"os"
 	"slices"
 	"strconv"
 	"strings"
@@ -223,106 +222,4 @@ func Marshal(writer io.WriteSeeker, root *BoxNode) (n uint64, err error) {
 	}
 
 	return handler(root)
-}
-
-func Main() {
-	//f, err := os.Open("temp/P918331953_A1770791065_audio_en_gr2304_alac_m.mp4")
-	//f, err := os.Open("temp/P915444077_A1770791066_audio_en_gr256_mp4a-40-2-0.mp4")
-	f, err := os.Open("temp/P915444077_A1770791066_MV_video_gr290_sdr_1488x1080_cbcs_--0.mp4")
-	//f, err := os.Open("Downloads/Coldplay/2014-05-19 - Ghost Stories [825646299133]/Disc 1/1. Always In My Head.m4a")
-	if err != nil {
-		panic(err)
-	}
-	w, err := os.Create("a.m4a")
-	if err != nil {
-		panic(err)
-	}
-	defer w.Close()
-	defer f.Close()
-	//isobmff := ISOBaseMediaFileFormat{}
-	//err = Unmarshal(f, &isobmff)
-	//if err != nil {
-	//	panic(err)
-	//}
-	//println(isobmff.Ftyp.Info.Type.String())
-	//println(string(isobmff.Ftyp.Payload.MajorBrand[:]))
-	//println(isobmff.Moov.Info.Type.String())
-	//println(isobmff.Moov.Mvhd.Info.Type.String())
-	//println(isobmff.Moov.Trak[0].Mdia.Hdlr.Payload.Name)
-	//println(isobmff.Moov.Trak[0].Mdia.Minf.Stbl.Stco.Payload.EntryCount)
-
-	root, err := Unmarshal(f)
-	if err != nil {
-		panic(err)
-	}
-	println(root.Stringify())
-	n, err := Marshal(w, root)
-	if err != nil {
-		panic(err)
-	}
-	println(n)
-
-	fst, err := root.P("moov.trak.mdia.minf.stbl.stsd")
-	println(fst[0].Box.(*mp4.Stsd).EntryCount)
-	for _, node := range fst[0].Children {
-		println(node.Box.GetType().String())
-		enca := node.Box.(*mp4.AudioSampleEntry)
-		fst, _ := node.P("sinf.schi.tenc")
-		tenc := fst[0].Box.(*mp4.Tenc)
-		println(string(tenc.DefaultConstantIV[:]))
-		println(enca.SampleSize)
-		println()
-	}
-
-	println(ValidateISOBMFF(root))
-	fst, err = root.P("moof[3]")
-	println(fst)
-
-	/*
-		fst, err = root.P("moov.trak.udta.ludt")
-		println("LoudnessBases: []LoudnessBase{")
-		for _, node := range fst[0].Children {
-			println(node.Info.Type.String())
-			loudness := node.Box.(*mp4.LoudnessEntry)
-			println(loudness.Version)
-			println(loudness.Flags[2])
-			println(loudness.LoudnessBaseCount)
-			for _, base := range loudness.LoudnessBases {
-				println("EQSetID:", base.EQSetID, ",")
-				println("DownmixID:", base.DownmixID, ",")
-				println("DRCSetID:", base.DRCSetID, ",")
-				println("BsSamplePeakLevel:", base.BsSamplePeakLevel, ",")
-				println("BsTruePeakLevel:", base.BsTruePeakLevel, ",")
-				println("MeasurementSystemForTP:", base.MeasurementSystemForTP, ",")
-				println("ReliabilityForTP:", base.ReliabilityForTP, ",")
-				println("MeasurementCount:", base.MeasurementCount, ",")
-				println("Measurements: []LoudnessMeasurement{")
-
-				for _, measure := range base.Measurements {
-					println("{")
-					println("    MethodDefinition:", measure.MethodDefinition, ",")
-					println("    MethodValue:", measure.MethodValue, ",")
-					println("    MeasurementSystem:", measure.MeasurementSystem, ",")
-					println("    Reliability:", measure.Reliability, ",")
-					println("},")
-				}
-
-				println("},")
-			}
-			println("},")
-		}
-	*/
-
-	//fst, err = root.P("moof.traf.senc")
-	//senc := fst[0].Box.(*box_types.Senc)
-	//for _, sample := range senc.SampleEntries {
-	//	for _, subsample := range sample.SubsampleEntries {
-	//		println(subsample.BytesOfProtectedData, subsample.BytesOfClearData)
-	//	}
-	//}
-	//fst, err := forest[1].Path("udta.meta.ilst.sonm.data")
-	//if err != nil {
-	//	panic(err)
-	//}
-	//println(string(fst[0].Box.(*mp4.Data).Data))
 }

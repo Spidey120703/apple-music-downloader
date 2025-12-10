@@ -1,7 +1,21 @@
-.idea
+# IDE and Editor
+.vscode/
+.idea/
+*.swp
+*.swo
 
-### Data ###
-Temp
-Downloads
-References
-bin
+# System Files
+.DS_Store
+Thumbs.db
+
+# Temporary Files
+/Temp/
+/Downloads/
+/References/
+/bin/
+
+# Media Files
+*.mp4
+*.m4v
+*.m4a
+*.m4s
