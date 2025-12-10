@@ -1,0 +1,438 @@
+   syntax = "proto2";
+
+option go_package = "internal/drm/widevine/cdm;cdm";
+
+/*
+ * Original Widevine CENC Header copied from:
+ *  - Widevine: Common Encryption API for Widevine DRM (Version 1.5)
+ *    URL: https://storage.googleapis.com/wvdocs/Widevine_DRM_Encryption_API.pdf
+ */
+message WidevineCencHeader {
+  enum Algorithm {
+    UNENCRYPTED = 0;
+    AESCTR = 1;
+  }
+  optional Algorithm algorithm = 1;
+  repeated bytes key_id = 2;
+  // Content provider name.
+  optional string provider = 3;
+  // A content identifier, specified by content provider.
+  optional bytes content_id = 4;
+  // Track type. Acceptable values are SD, HD and AUDIO. Used to
+  // differentiate content keys used by an asset.
+  optional string track_type_deprecated = 5;
+  // The name of a registered policy to be used for this asset.
+  optional string policy = 6;
+  // Crypto period index, for media using key rotation.
+  optional uint32 crypto_period_index = 7;
+  // Optional protected context for group content. The grouped_license is a
+  // serialized SignedMessage.
+  optional bytes grouped_license = 8;
+  // Protection scheme identifying the encryption algorithm.
+  // Represented as one of the following 4CC values:
+  // 'cenc' (AESCTR), 'cbc1' (AESCBC),
+  // 'cens' (AESCTR subsample), 'cbcs' (AESCBC subsample).
+  optional uint32 protection_scheme = 9;
+  // Optional. For media using key rotation, this represents the duration
+  // of each crypto period in seconds.
+  optional uint32 crypto_period_seconds = 10;
+}
+
+/*
+ * Copied from "github.com/tomer8007/widevine-l3-decryptor/license_protocol.proto".
+ * Some message types have been customized to be compatible with Widevine
+ * and its CENC Header format.
+ */
+// ----------------------------------------------------------------------------
+// license_protocol.proto
+// ----------------------------------------------------------------------------
+// Copyright 2013 Google Inc. All Rights Reserved.
+//
+// Description:
+//   Definitions of the protocol buffer messages used in the Widevine license
+//   exchange protocol.
+
+enum LicenseType {
+  STREAMING = 1;
+  OFFLINE = 2;
+}
+
+// LicenseIdentification is propagated from LicenseRequest to License,
+// incrementing version with each iteration.
+message LicenseIdentification {
+  optional bytes request_id = 1;
+  optional bytes session_id = 2;
+  optional bytes purchase_id = 3;
+  optional LicenseType type = 4;
+  optional int32 version = 5;
+  optional bytes provider_session_token = 6;
+}
+
+message License {
+  message Policy {
+    // Indicates that playback of the content is allowed.
+    optional bool can_play = 1 [default = false];
+
+    // Indicates that the license may be persisted to non-volatile
+    // storage for offline use.
+    optional bool can_persist = 2 [default = false];
+
+    // Indicates that renewal of this license is allowed.
+    optional bool can_renew = 3 [default = false];
+
+    // For the |*duration*| fields, playback must halt when
+    // license_start_time (seconds since the epoch (UTC)) +
+    // license_duration_seconds is exceeded. A value of 0
+    // indicates that there is no limit to the duration.
+
+    // Indicates the rental window.
+    optional int64 rental_duration_seconds = 4 [default = 0];
+
+    // Indicates the viewing window, once playback has begun.
+    optional int64 playback_duration_seconds = 5 [default = 0];
+
+    // Indicates the time window for this specific license.
+    optional int64 license_duration_seconds = 6 [default = 0];
+
+    // The |renewal*| fields only apply if |can_renew| is true.
+
+    // The window of time, in which playback is allowed to continue while
+    // renewal is attempted, yet unsuccessful due to backend problems with
+    // the license server.
+    optional int64 renewal_recovery_duration_seconds = 7 [default = 0];
+
+    // All renewal requests for this license shall be directed to the
+    // specified URL.
+    optional string renewal_server_url = 8;
+
+    // How many seconds after license_start_time, before renewal is first
+    // attempted.
+    optional int64 renewal_delay_seconds = 9 [default = 0];
+
+    // Specifies the delay in seconds between subsequent license
+    // renewal requests, in case of failure.
+    optional int64 renewal_retry_interval_seconds = 10 [default = 0];
+
+    // Indicates that the license shall be sent for renewal when usage is
+    // started.
+    optional bool renew_with_usage = 11 [default = false];
+
+    // Indicates to client that license renewal and release requests ought to
+    // include ClientIdentification (client_id).
+    optional bool renew_with_client_id = 12 [default = false];
+  }
+
+  message KeyContainer {
+    enum KeyType {
+      // Exactly one key of this type must appear.
+      SIGNING = 1;
+      CONTENT = 2;
+      KEY_CONTROL = 3;
+      OPERATOR_SESSION = 4;
+    }
+
+    // The SecurityLevel enumeration allows the server to communicate the level
+    // of robustness required by the client, in order to use the key.
+    enum SecurityLevel {
+      // Software-based whitebox crypto is required.
+      SW_SECURE_CRYPTO = 1;
+
+      // Software crypto and an obfuscated decoder is required.
+      SW_SECURE_DECODE = 2;
+
+      // The key material and crypto operations must be performed within a
+      // hardware backed trusted execution environment.
+      HW_SECURE_CRYPTO = 3;
+
+      // The crypto and decoding of content must be performed within a hardware
+      // backed trusted execution environment.
+      HW_SECURE_DECODE = 4;
+
+      // The crypto, decoding and all handling of the media (compressed and
+      // uncompressed) must be handled within a hardware backed trusted
+      // execution environment.
+      HW_SECURE_ALL = 5;
+    }
+
+    message KeyControl {
+      // If present, the key control must be communicated to the secure
+      // environment prior to any usage. This message is automatically generated
+      // by the Widevine License Server SDK.
+      optional bytes key_control_block = 1;
+      optional bytes iv = 2;
+    }
+
+    message OutputProtection {
+      // Indicates whether HDCP is required on digital outputs, and which
+      // version should be used.
+      enum HDCP {
+        HDCP_NONE = 0;
+        HDCP_V1 = 1;
+        HDCP_V2 = 2;
+        HDCP_V2_1 = 3;
+        HDCP_V2_2 = 4;
+        HDCP_NO_DIGITAL_OUTPUT = 0xff;
+      }
+      optional HDCP hdcp = 1 [default = HDCP_NONE];
+
+      // Indicate the CGMS setting to be inserted on analog output.
+      enum CGMS {
+        CGMS_NONE = 42;
+        COPY_FREE = 0;
+        COPY_ONCE = 2;
+        COPY_NEVER = 3;
+      }
+      optional CGMS cgms_flags = 2 [default = CGMS_NONE];
+    }
+
+    message VideoResolutionConstraint {
+      // Minimum and maximum video resolutions in the range (height x width).
+      optional uint32 min_resolution_pixels = 1;
+      optional uint32 max_resolution_pixels = 2;
+      // Optional output protection requirements for this range. If not
+      // specified, the OutputProtection in the KeyContainer applies.
+      optional OutputProtection required_protection = 3;
+    }
+
+    message OperatorSessionKeyPermissions {
+      // Permissions/key usage flags for operator service keys
+      // (type = OPERATOR_SESSION).
+      optional bool allow_encrypt = 1 [default = false];
+      optional bool allow_decrypt = 2 [default = false];
+      optional bool allow_sign = 3 [default = false];
+      optional bool allow_signature_verify = 4 [default = false];
+    }
+
+    optional bytes id = 1;
+    optional bytes iv = 2;
+    optional bytes key = 3;
+    optional KeyType type = 4;
+    optional SecurityLevel level = 5 [default = SW_SECURE_CRYPTO];
+    optional OutputProtection required_protection = 6;
+    // NOTE: Use of requested_protection is not recommended as it is only
+    // supported on a small number of platforms.
+    optional OutputProtection requested_protection = 7;
+    optional KeyControl key_control = 8;
+    optional OperatorSessionKeyPermissions operator_session_key_permissions = 9;
+    // Optional video resolution constraints. If the video resolution of the
+    // content being decrypted/decoded falls within one of the specified ranges,
+    // the optional required_protections may be applied. Otherwise an error will
+    // be reported.
+    // NOTE: Use of this feature is not recommended, as it is only supported on
+    // a small number of platforms.
+    repeated VideoResolutionConstraint video_resolution_constraints = 10;
+    // Optional flag to indicate the key must only be used if the client
+    // supports anti rollback of the user table.  Content provider can query the
+    // client capabilities to determine if the client support this feature.
+    optional bool anti_rollback_usage_table = 11 [default = false];
+  }
+
+  optional LicenseIdentification id = 1;
+  optional Policy policy = 2;
+  repeated KeyContainer key = 3;
+  optional int64 license_start_time = 4;
+  optional bool remote_attestation_verified = 5 [default = false];
+  // Client token generated by the content provider. Optional.
+  optional bytes provider_client_token = 6;
+}
+
+enum ProtocolVersion {
+  VERSION_2_0 = 20;
+  VERSION_2_1 = 21;
+}
+
+message LicenseRequest {
+  message ContentIdentification {
+    message CENC  {
+      optional WidevineCencHeader pssh = 1;
+      optional LicenseType license_type = 2;
+      optional bytes request_id = 3;  // Opaque, client-specified.
+    }
+
+    message WebM {
+      optional bytes header = 1;
+      optional LicenseType license_type = 2;
+      optional bytes request_id = 3;  // Opaque, client-specified.
+    }
+
+    message ExistingLicense {
+      optional LicenseIdentification license_id = 1;
+      optional int64 seconds_since_started = 2;
+      optional int64 seconds_since_last_played = 3;
+      optional bytes session_usage_table_entry = 4;
+    }
+
+    // Exactly one of these must be present.
+    optional CENC cenc_id = 1;
+    optional WebM webm_id = 2;
+    optional ExistingLicense license = 3;
+  }
+
+  enum RequestType {
+    NEW = 1;
+    RENEWAL = 2;
+    RELEASE = 3;
+  }
+
+  // The client_id provides information authenticating the calling device.  It
+  // contains the Widevine keybox token that was installed on the device at the
+  // factory.  This field or encrypted_client_id below is required for a valid
+  // license request, but both should never be present in the same request.
+  optional ClientIdentification client_id = 1;
+  optional ContentIdentification content_id = 2;
+  optional RequestType type = 3;
+  optional int64 request_time = 4;
+  // Old-style decimal-encoded string key control nonce.
+  optional bytes key_control_nonce_deprecated = 5;
+  optional ProtocolVersion protocol_version = 6 [default = VERSION_2_0];
+  // New-style uint32 key control nonce, please use instead of
+  // key_control_nonce_deprecated.
+  optional uint32 key_control_nonce = 7;
+  // Encrypted ClientIdentification message, used for privacy purposes.
+  optional EncryptedClientIdentification encrypted_client_id = 8;
+}
+
+message RemoteAttestation {
+  // Encrypted ClientIdentification message containing the device remote
+  // attestation certificate. Required.
+  optional EncryptedClientIdentification certificate = 1;
+  // Bytes of salt which were added to the remote attestation challenge prior to
+  // signing it. Required.
+  optional bytes salt = 2;
+  // Signed remote attestation challenge + salt. Required.
+  optional bytes signature = 3;
+}
+
+message SignedMessage {
+  enum MessageType {
+    LICENSE_REQUEST = 1;
+    LICENSE = 2;
+    ERROR_RESPONSE = 3;
+    SERVICE_CERTIFICATE_REQUEST = 4;
+    SERVICE_CERTIFICATE = 5;
+  }
+
+  optional MessageType type = 1;
+  repeated bytes msg = 2;
+  optional bytes signature = 3;
+  optional bytes session_key = 4;
+  // Remote attestation data which will be present in the initial license
+  // request for ChromeOS client devices operating in verified mode. Remote
+  // attestation challenge data is |msg| field above. Optional.
+  optional RemoteAttestation remote_attestation = 5;
+}
+
+// ----------------------------------------------------------------------------
+// client_identification.proto
+// ----------------------------------------------------------------------------
+// Copyright 2013 Google Inc. All Rights Reserved.
+//
+// Description:
+//   ClientIdentification messages used by provisioning and license protocols.
+
+// ClientIdentification message used to authenticate the client device.
+message ClientIdentification {
+  enum TokenType {
+    KEYBOX = 0;
+    DEVICE_CERTIFICATE = 1;
+    REMOTE_ATTESTATION_CERTIFICATE = 2;
+  }
+
+  message NameValue {
+    optional string name = 1;
+    optional string value = 2;
+  }
+
+  // Capabilities which not all clients may support. Used for the license
+  // exchange protocol only.
+  message ClientCapabilities {
+    enum HdcpVersion {
+      HDCP_NONE = 0;
+      HDCP_V1 = 1;
+      HDCP_V2 = 2;
+      HDCP_V2_1 = 3;
+      HDCP_V2_2 = 4;
+      HDCP_NO_DIGITAL_OUTPUT = 0xff;
+    }
+
+    optional bool client_token = 1 [default = false];
+    optional bool session_token = 2 [default = false];
+    optional bool video_resolution_constraints = 3 [default = false];
+    optional HdcpVersion max_hdcp_version = 4 [default = HDCP_NONE];
+    optional uint32 oem_crypto_api_version = 5;
+    optional bool anti_rollback_usage_table = 6 [default = false];
+  }
+
+  // Type of factory-provisioned device root of trust. Optional.
+  optional TokenType type = 1 [default = KEYBOX];
+  // Factory-provisioned device root of trust. Required.
+  optional bytes token = 2;
+  // Optional client information name/value pairs.
+  repeated NameValue client_info = 3;
+  // Client token generated by the content provider. Optional.
+  optional bytes provider_client_token = 4;
+  // Number of licenses received by the client to which the token above belongs.
+  // Only present if client_token is specified.
+  optional uint32 license_counter = 5;
+  // List of non-baseline client capabilities.
+  optional ClientCapabilities client_capabilities = 6;
+}
+
+// EncryptedClientIdentification message used to hold ClientIdentification
+// messages encrypted for privacy purposes.
+message EncryptedClientIdentification {
+  // Service ID for which the ClientIdentifcation is encrypted (owner of service
+  // certificate).
+  optional string service_id = 1;
+  // Serial number for the service certificate for which ClientIdentification is
+  // encrypted.
+  optional bytes service_certificate_serial_number = 2;
+  // Serialized ClientIdentification message, encrypted with the privacy key using
+  // AES-128-CBC with PKCS#5 padding.
+  optional bytes encrypted_client_id = 3;
+  // Initialization vector needed to decrypt encrypted_client_id.
+  optional bytes encrypted_client_id_iv = 4;
+  // AES-128 privacy key, encrytped with the service public public key using
+  // RSA-OAEP.
+  optional bytes encrypted_privacy_key = 5;
+}
+
+// ----------------------------------------------------------------------------
+
+message SignedLicenseRequest {
+  enum MessageType {
+    LICENSE_REQUEST = 1;
+    LICENSE = 2;
+    ERROR_RESPONSE = 3;
+    SERVICE_CERTIFICATE_REQUEST = 4;
+    SERVICE_CERTIFICATE = 5;
+  }
+
+  optional MessageType type = 1;
+  optional LicenseRequest msg = 2;
+  optional bytes signature = 3;
+  optional bytes session_key = 4;
+  // Remote attestation data which will be present in the initial license
+  // request for ChromeOS client devices operating in verified mode. Remote
+  // attestation challenge data is |msg| field above. Optional.
+  optional RemoteAttestation remote_attestation = 5;
+}
+
+message SignedLicense {
+  enum MessageType {
+    LICENSE_REQUEST = 1;
+    LICENSE = 2;
+    ERROR_RESPONSE = 3;
+    SERVICE_CERTIFICATE_REQUEST = 4;
+    SERVICE_CERTIFICATE = 5;
+  }
+
+  optional MessageType type = 1;
+  optional License msg = 2;
+  optional bytes signature = 3;
+  optional bytes session_key = 4;
+  // Remote attestation data which will be present in the initial license
+  // request for ChromeOS client devices operating in verified mode. Remote
+  // attestation challenge data is |msg| field above. Optional.
+  optional RemoteAttestation remote_attestation = 5;
+}
