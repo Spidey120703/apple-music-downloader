@@ -38,10 +38,10 @@ func RandomSessionID() (s [32]byte) {
 }
 
 type ContentDecryptionModule struct {
-	PrivateKey *rsa.PrivateKey
-	ClientID   []byte
-	SessionID  [32]byte
-	WidevineCencHeader
+	PrivateKey         *rsa.PrivateKey
+	ClientID           []byte
+	SessionID          [32]byte
+	WidevineCencHeader WidevineCencHeader
 }
 
 func (c *ContentDecryptionModule) Init(privateKeyRaw string, clientID []byte, initData []byte) (err error) {

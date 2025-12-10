@@ -1,33 +1,27 @@
 package fairplay
 
 import (
+	"downloader/barutils"
+	"downloader/mp4/mp4utils"
 	"downloader/utils"
 	"encoding/binary"
+	"errors"
 	"io"
 	"math"
 	"net"
-
-	"github.com/schollz/progressbar/v3"
 )
 
-const KeyFormatFairPlay = "com.apple.streamingkeydelivery"
+const (
+	SystemStringPrefix = "com.apple.fps"
+	KeyFormatString    = "com.apple.streamingkeydelivery"
+)
 
 const (
 	PrefetchKeyUri = "skd://itunes.apple.com/P000000000/s1/e1"
 	DefaultId      = "0"
 )
 
-type Sample struct {
-	Data                   []byte
-	SampleDescriptionIndex uint32
-	SampleDuration         uint32
-}
-
-type Chunk struct {
-	Samples []Sample
-}
-
-func DecryptSample(samples []Sample, songID string, keys []string) (decryptedSamples [][]byte, err error) {
+func DecryptSample(samples []mp4utils.Sample, adamID string, keyURIs [][]byte) (err error) {
 	conn, err := net.Dial("tcp", "127.0.0.1:10020")
 	if err != nil {
 		return
@@ -36,61 +30,51 @@ func DecryptSample(samples []Sample, songID string, keys []string) (decryptedSam
 
 	var lastIndex uint32 = math.MaxUint32
 
-	bar := progressbar.Default(int64(len(samples)), "Decrypting")
+	bar := barutils.NewProgressBar(int64(len(samples)), "Decrypting Samples:")
 
 	for _, sample := range samples {
 		if lastIndex != sample.SampleDescriptionIndex {
 			if lastIndex != uint32(math.MaxUint32) {
-				_, err = conn.Write([]byte{0, 0, 0, 0})
-				if err != nil {
+				if _, err = conn.Write([]byte{0, 0, 0, 0}); err != nil {
 					return
 				}
 			}
-			keyUri := keys[sample.SampleDescriptionIndex]
-			id := songID
-			if keyUri == PrefetchKeyUri {
+			keyURI := keyURIs[sample.SampleDescriptionIndex-1]
+			id := adamID
+			if string(keyURI) == PrefetchKeyUri {
 				id = DefaultId
 			}
-
-			_, err = conn.Write([]byte{byte(len(id))})
-			if err != nil {
-				return
-			}
-			_, err = io.WriteString(conn, id)
-			if err != nil {
-				return
+			if len(id) == 0 {
+				return errors.New("adam id is empty")
 			}
 
-			_, err = conn.Write([]byte{byte(len(keyUri))})
-			if err != nil {
+			if _, err = conn.Write([]byte{byte(len(id))}); err != nil {
 				return
 			}
-			_, err = io.WriteString(conn, keyUri)
-			if err != nil {
+			if _, err = io.WriteString(conn, id); err != nil {
+				return
+			}
+
+			if _, err = conn.Write([]byte{byte(len(keyURI))}); err != nil {
+				return
+			}
+			if _, err = conn.Write(keyURI); err != nil {
 				return
 			}
 		}
 		lastIndex = sample.SampleDescriptionIndex
 
-		err = binary.Write(conn, binary.LittleEndian, uint32(len(sample.Data)))
-		if err != nil {
+		if err = binary.Write(conn, binary.LittleEndian, uint32(len(sample.Data))); err != nil {
 			return
 		}
-		_, err = conn.Write(sample.Data)
-		if err != nil {
+		if _, err = conn.Write(sample.Data); err != nil {
 			return
 		}
-
-		decrypted := make([]byte, len(sample.Data))
-		_, err = io.ReadFull(conn, decrypted)
-		if err != nil {
+		if _, err = io.ReadFull(conn, sample.Data); err != nil {
 			return
 		}
 
-		decryptedSamples = append(decryptedSamples, decrypted)
-
-		err = bar.Add(1)
-		if err != nil {
+		if err = bar.Add(1); err != nil {
 			return
 		}
 	}

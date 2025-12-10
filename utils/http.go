@@ -1,19 +1,30 @@
 package utils
 
 import (
-	"downloader/consts"
-	"downloader/log"
-	"errors"
+	"downloader/LOG"
+	"downloader/barutils"
+	"downloader/config"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"path"
+	"strconv"
 	"strings"
+	"sync"
 
-	"github.com/schollz/progressbar/v3"
+	"github.com/vbauerster/mpb/v8"
 )
 
-const TempDir = "temp/"
+var DefaultClient *http.Client
+
+func init() {
+	DefaultClient = &http.Client{
+		Transport: &http.Transport{
+			Proxy: http.ProxyFromEnvironment,
+		},
+	}
+}
 
 func DownloadFile(url string, targetPath string) (string, error) {
 	var filepath string
@@ -27,29 +38,28 @@ func DownloadFile(url string, targetPath string) (string, error) {
 	}
 
 	if !IsDirExists(targetPath) {
-		err := os.MkdirAll(targetPath, os.ModeDir)
-		if err != nil {
+		if err := os.MkdirAll(targetPath, os.ModeDir); err != nil {
 			return "", err
 		}
 	}
 
 	if IsFileExists(filepath) {
-		log.Warn.Printf("File already exists: %s", filepath)
+		LOG.Warn.Printf("File already exists: %s", filepath)
 		return filepath, os.ErrExist
 	}
 
-	log.Info.Println("Start downloading...")
-	log.Info.Println("\t", url)
+	LOG.Info.Println("Start downloading...")
+	LOG.Info.Println("\t", url)
 
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		return "", err
 	}
 
-	req.Header.Set("User-Agent", consts.UserAgent)
+	req.Header.Set("User-Agent", config.UserAgent)
 	req.Header.Set("Cache-Control", "no-cache")
-	req.Header.Set("Referer", consts.Referer)
-	req.Header.Set("Origin", consts.Origin)
+	req.Header.Set("Referer", config.Referer)
+	req.Header.Set("Origin", config.Origin)
 
 	resp, err := http.DefaultClient.Do(req)
 
@@ -58,7 +68,7 @@ func DownloadFile(url string, targetPath string) (string, error) {
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return "", errors.New(resp.Status)
+		return "", fmt.Errorf("bad http status: %s %s", resp.Proto, resp.Status)
 	}
 
 	f, err := os.Create(filepath)
@@ -67,7 +77,7 @@ func DownloadFile(url string, targetPath string) (string, error) {
 	}
 	defer CloseQuietly(f)
 
-	bar := progressbar.DefaultBytes(
+	bar := barutils.NewProgressBarBytes(
 		resp.ContentLength,
 		"Downloading",
 	)
@@ -78,7 +88,7 @@ func DownloadFile(url string, targetPath string) (string, error) {
 		return "", err
 	}
 
-	log.Info.Println("Download finished")
+	LOG.Info.Println("Download finished")
 
 	return filepath, nil
 }
@@ -96,4 +106,89 @@ func HttpOpen(url string, cachePath string) (file *os.File, err error) {
 	// defer CloseQuietly(file)
 
 	return file, nil
+}
+
+func MultiDownload(urls []string, dir string, numThreads int) error {
+	var wg sync.WaitGroup
+	var sem = make(chan struct{}, numThreads)
+	var ec = make(chan error, len(urls))
+
+	p := barutils.NewProgress(&wg, config.BarWidth, config.BarRefreshRate)
+
+	for _, url := range urls {
+		wg.Add(1)
+		sem <- struct{}{}
+
+		go func(url string) {
+			defer func() {
+				<-sem
+				wg.Done()
+			}()
+
+			if err := download(url, dir, p); err != nil {
+				ec <- err
+			}
+		}(url)
+	}
+
+	p.Wait()
+	close(ec)
+
+	select {
+	case err := <-ec:
+		return err
+	default:
+		return nil
+	}
+}
+
+func download(url, dir string, p *mpb.Progress) (err error) {
+	filename := url[strings.LastIndex(url, "/")+1:]
+	filePath := path.Join(dir, filename)
+	if IsFileExists(filePath) {
+		LOG.Warn.Printf("File already exists: %s", filePath)
+		return
+	}
+	if err = os.MkdirAll(path.Dir(filePath), os.ModePerm); err != nil {
+		return
+	}
+
+	var req *http.Request
+	var resp *http.Response
+	if req, err = http.NewRequest(http.MethodGet, url, nil); err != nil {
+		return
+	}
+	req.Header.Set("User-Agent", config.UserAgent)
+	req.Header.Set("Referer", config.Referer)
+	req.Header.Set("Origin", config.Origin)
+
+	if resp, err = http.DefaultClient.Do(req); err != nil {
+		return fmt.Errorf("request failed: %w", err)
+	}
+	defer CloseQuietly(resp.Body)
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("bad http status: %s %s", resp.Proto, resp.Status)
+	}
+
+	var contentLength int
+	if contentLength, err = strconv.Atoi(resp.Header.Get("Content-Length")); err != nil {
+		return fmt.Errorf("bad `Content-Length`: \"%s\"", resp.Header.Get("Content-Length"))
+	}
+
+	bar := barutils.NewBar(p, int64(contentLength), fmt.Sprintf("Downloading %s: ", filename))
+
+	proxyReader := bar.ProxyReader(resp.Body)
+	defer CloseQuietly(proxyReader)
+
+	var output *os.File
+	if output, err = os.Create(filePath); err != nil {
+		return fmt.Errorf("create output failed: %w", err)
+	}
+	if _, err = io.Copy(output, proxyReader); err != nil {
+		_ = os.Remove(filename)
+		return
+	}
+
+	return
 }

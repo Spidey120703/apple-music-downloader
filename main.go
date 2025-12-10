@@ -1,397 +1,373 @@
 package main
 
 import (
-	"bytes"
+	"downloader/LOG"
 	"downloader/api/applemusic"
 	"downloader/api/itunes"
-	"downloader/drm/fairplay"
-	"downloader/drm/widevine"
-	"downloader/log"
+	"downloader/config"
+	"downloader/m3u8/hlsutils"
+	"downloader/mp4/metadata"
+	ttml2 "downloader/ttml"
 	"downloader/utils"
 	"fmt"
-	"io"
 	"os"
 	"path"
 	"strings"
-
-	"github.com/abema/go-mp4"
 )
 
-func downloadSong(m4aPath string, itunesSongInfo *itunes.Song, song *applemusic.Songs, album *applemusic.Albums, coverData []byte, lyrics string) error {
-	log.Info.Println(strings.Repeat("=", 128))
-	log.Info.Printf("Downloading (%d/%d). %s", *song.Attributes.TrackNumber, *album.Attributes.TrackCount, *song.Attributes.Name)
-
-	url, keys, err := handleTrackEnhanceHls(*song.Attributes.ExtendedAssetUrls.EnhancedHls)
-	if err != nil {
-		return err
+type APIContext struct {
+	iTunes struct {
+		Song       *itunes.Song
+		MusicVideo *itunes.MusicVideo
 	}
-
-	mp4File, err := utils.HttpOpen(url, utils.TempDir)
-	if err != nil {
-		return err
+	AppleMusic struct {
+		Songs       *applemusic.Songs
+		Albums      *applemusic.Albums
+		MusicVideos *applemusic.MusicVideos
 	}
-	defer utils.CloseQuietly(mp4File)
-
-	log.Info.Println("Start extracting MP4 file...")
-	alacInfo, err := extractAlac(mp4File)
-	if alacInfo == nil || err != nil {
-		return err
+	MZPlay struct {
+		WebPlayback *applemusic.WebPlaybackSong
 	}
-	log.Info.Println("Extract finished")
-
-	log.Info.Println("Start decrypting ALAC Samples...")
-	samples, err := fairplay.DecryptSample(alacInfo.Samples(), *song.ID, keys)
-	if err != nil {
-		return err
-	}
-	log.Info.Println("Decrypt finished")
-
-	m4aFile, err := os.Create(m4aPath)
-	if err != nil {
-		return err
-	}
-	defer utils.CloseQuietly(m4aFile)
-
-	err = writeM4A(
-		mp4.NewWriter(m4aFile),
-		alacInfo,
-		itunesSongInfo,
-		song,
-		album,
-		utils.PackData(samples),
-		coverData,
-		lyrics)
-	if err != nil {
-		return err
-	}
-
-	log.Info.Println("Download finished, saved to:", m4aPath)
-	return nil
+	AlbumCoverData []byte
 }
 
-func downloadMusicVideo(
-	mp4Path string,
-	hlsPlaylistURL string,
-	itunesMusicVideoInfo *itunes.MusicVideo,
-	webPlayback *applemusic.WebPlaybackSong,
-	song *applemusic.Songs,
-	album *applemusic.Albums,
-	coverData []byte,
-	token string,
-) error {
-	log.Info.Println(strings.Repeat("=", 128))
-	log.Info.Printf("Downloading (%d/%d). %s", *song.Attributes.TrackNumber, *album.Attributes.TrackCount, *song.Attributes.Name)
+const (
+	ExtM4A = ".m4a"
+	ExtM4V = ".m4v"
+	ExtMP4 = ".mp4"
+)
 
-	_, videoHlsInfo, audioHlsInfo, err := handleMusicVideoHls(hlsPlaylistURL)
-	if err != nil {
-		return err
-	}
-
-	// Processing video track
-	var videoFiles []*os.File
-	defer utils.CloseQuietlyAll(videoFiles)
-
-	for _, uri := range videoHlsInfo.Urls {
-		file, err := utils.HttpOpen(uri, utils.TempDir)
-		if err != nil {
-			return err
-		}
-		videoFiles = append(videoFiles, file)
-	}
-
-	var mvInfo MusicVideoInfo
-
-	log.Info.Println("Start decrypting video track...")
-	videoData, err := widevine.Decrypt(videoFiles, videoHlsInfo.Keys[widevine.KeyFormatWidevine][0], webPlayback, token)
-	if err != nil {
-		return err
-	}
-	log.Info.Println("Decrypt finished")
-
-	err = extractAvc1([]io.ReadSeeker{videoFiles[0], bytes.NewReader(videoData)}, &mvInfo)
-	if err != nil {
-		return err
-	}
-
-	var videoSamples [][]byte
-	for _, videoSample := range mvInfo.VideoSamples() {
-		videoSamples = append(videoSamples, videoSample.Data)
-	}
-
-	mp4File, err := os.Create(mp4Path)
-	if err != nil {
-		return err
-	}
-	defer utils.CloseQuietly(mp4File)
-
-	// Processing audio track
-	var audioFiles []*os.File
-	defer utils.CloseQuietlyAll(audioFiles)
-
-	for _, uri := range audioHlsInfo.Urls {
-		file, err := utils.HttpOpen(uri, utils.TempDir)
-		if err != nil {
-			return err
-		}
-		audioFiles = append(audioFiles, file)
-	}
-
-	err = extractMp4a(audioFiles, &mvInfo)
-	if err != nil {
-		return err
-	}
-
-	log.Info.Println("Start decrypting AAC Samples...")
-	audioSamples, err := fairplay.DecryptSample(mvInfo.AudioSamples(), *song.ID, audioHlsInfo.Keys[fairplay.KeyFormatFairPlay])
-	if err != nil {
-		return err
-	}
-	log.Info.Println("Decrypt finished")
-
-	err = writeMP4(
-		mp4.NewWriter(mp4File),
-		&mvInfo,
-		itunesMusicVideoInfo,
-		song,
-		album,
-		utils.PackData(videoSamples),
-		utils.PackData(audioSamples),
-		coverData)
-	if err != nil {
-		return err
-	}
-
-	log.Info.Println("Download finished, saved to:", mp4Path)
-
-	return nil
+type FullPath struct {
+	TargetPath string
+	ArtistDir  string
+	AlbumDir   string
+	DiscDir    string
+	TrackName  string
+	Ext        string
 }
 
-func downloadAlbum(targetPath string, id string, token string) error {
-	album, err := applemusic.GetAlbumData(id, token)
-	if err != nil {
-		return err
+func (fp *FullPath) AlbumPath(elem ...string) string {
+	var parts []string
+	for _, e := range elem {
+		parts = append(parts, utils.SanitizePath(e))
+	}
+	return path.Join(
+		fp.TargetPath,
+		utils.SanitizePath(fp.ArtistDir),
+		utils.SanitizePath(fp.AlbumDir),
+		path.Join(parts...))
+}
+
+func (fp *FullPath) String() string {
+	return path.Join(
+		fp.TargetPath,
+		utils.SanitizePath(fp.ArtistDir),
+		utils.SanitizePath(fp.AlbumDir),
+		utils.SanitizePath(fp.DiscDir),
+		utils.SanitizePath(fp.TrackName)+fp.Ext)
+}
+
+type Downloader struct {
+	TargetPath string
+}
+
+func (d *Downloader) DownloadAlbum(albumID string, ctx APIContext, fullPath FullPath) (err error) {
+	if ctx.AppleMusic.Albums == nil {
+		if ctx.AppleMusic.Albums, err = applemusic.GetAlbumData(albumID); err != nil {
+			return
+		}
 	}
 
-	artistDir := utils.SanitizePath(*album.Attributes.ArtistName)
-	albumDir := fmt.Sprintf(
+	if len(fullPath.TargetPath) == 0 {
+		fullPath.TargetPath = d.TargetPath
+	}
+	if len(fullPath.ArtistDir) == 0 {
+		fullPath.ArtistDir = *ctx.AppleMusic.Albums.Attributes.ArtistName
+	}
+	fullPath.AlbumDir = fmt.Sprintf(
 		"%s - %s [%s]",
-		*album.Attributes.ReleaseDate,
-		utils.SanitizePath(*album.Attributes.Name),
-		*album.Attributes.Upc)
+		*ctx.AppleMusic.Albums.Attributes.ReleaseDate,
+		*ctx.AppleMusic.Albums.Attributes.Name,
+		*ctx.AppleMusic.Albums.Attributes.Upc)
 
-	coverPath := path.Join(targetPath, artistDir, albumDir, "Cover")
+	LOG.Info.Printf("Downloading album: %s", fullPath.AlbumDir)
+	LOG.Info.Println("Album Info:")
+	LOG.Info.Printf("\t\t%16s:  %s", "Album Name", *ctx.AppleMusic.Albums.Attributes.Name)
+	LOG.Info.Printf("\t\t%16s:  %s", "Artist Name", *ctx.AppleMusic.Albums.Attributes.ArtistName)
+	LOG.Info.Printf("\t\t%16s:  %s", "Genre Names", strings.Join(ctx.AppleMusic.Albums.Attributes.GenreNames, ", "))
+	LOG.Info.Printf("\t\t%16s:  %s", "Release Date", *ctx.AppleMusic.Albums.Attributes.ReleaseDate)
+	LOG.Info.Printf("\t\t%16s:  %s", "Record Label", *ctx.AppleMusic.Albums.Attributes.RecordLabel)
+	LOG.Info.Printf("\t\t%16s:  %s", "Copyright", *ctx.AppleMusic.Albums.Attributes.Copyright)
+	LOG.Info.Printf("\t\t%16s:  %s", "UPC", *ctx.AppleMusic.Albums.Attributes.Upc)
+	LOG.Info.Println()
 
-	coverData, err := ReadCover(*album.Attributes.Artwork, coverPath)
-	if err != nil {
-		return err
+	if ctx.AlbumCoverData, err = ReadCover(*ctx.AppleMusic.Albums.Attributes.Artwork, fullPath.AlbumPath("Cover")); err != nil {
+		return
 	}
 
-	{ // Extras
+	if ctx.AppleMusic.Albums.Attributes.EditorialArtwork != nil {
+		artworks := make(map[string]*applemusic.Artwork)
+		artworks["BannerUber"] = ctx.AppleMusic.Albums.Attributes.EditorialArtwork.BannerUber
+		artworks["OriginalFlowcaseBrick"] = ctx.AppleMusic.Albums.Attributes.EditorialArtwork.OriginalFlowcaseBrick
+		artworks["StaticDetailSquare"] = ctx.AppleMusic.Albums.Attributes.EditorialArtwork.StaticDetailSquare
+		artworks["StaticDetailTall"] = ctx.AppleMusic.Albums.Attributes.EditorialArtwork.StaticDetailTall
+		artworks["StoreFlowcase"] = ctx.AppleMusic.Albums.Attributes.EditorialArtwork.StoreFlowcase
+		artworks["SubscriptionHero"] = ctx.AppleMusic.Albums.Attributes.EditorialArtwork.SubscriptionHero
+		artworks["SuperHeroTall"] = ctx.AppleMusic.Albums.Attributes.EditorialArtwork.SuperHeroTall
 
-		var downloadArtwork = func(artwork *applemusic.Artwork, name string) (err error) {
+		for _, artwork := range artworks {
 			if artwork == nil {
-				return nil
+				continue
 			}
-			artworkPath := path.Join(targetPath, artistDir, albumDir, "Extras", "Artworks", name)
-
-			err = os.MkdirAll(path.Dir(artworkPath), os.ModePerm)
-			if err != nil {
-				return err
-			}
-
-			_, err = DownloadArtwork(*artwork, artworkPath)
-			return err
+			_, err = DownloadArtwork(*artwork, fullPath.AlbumPath("Extras", "Artworks", FilenameFormatOriginalFileName))
 		}
-
-		var downloadMotionVideo = func(motionVideo *applemusic.MotionVideo, name string) (err error) {
-			if motionVideo == nil {
-				return nil
-			}
-			motionVideoPath := path.Join(targetPath, artistDir, albumDir, "Extras", "MotionVideos", name)
-
-			err = os.MkdirAll(path.Dir(motionVideoPath), os.ModePerm)
-			if err != nil {
-				return err
-			}
-
-			_, _, err = DownloadMotionVideo(*motionVideo, motionVideoPath)
-			return err
-		}
-
-		if album.Attributes.EditorialArtwork != nil {
-			err = downloadArtwork(album.Attributes.EditorialArtwork.BannerUber, "BannerUber")
-			if err != nil {
-				return err
-			}
-			err = downloadArtwork(album.Attributes.EditorialArtwork.OriginalFlowcaseBrick, "OriginalFlowcaseBrick")
-			if err != nil {
-				return err
-			}
-			err = downloadArtwork(album.Attributes.EditorialArtwork.StaticDetailSquare, "StaticDetailSquare")
-			if err != nil {
-				return err
-			}
-			err = downloadArtwork(album.Attributes.EditorialArtwork.StaticDetailTall, "StaticDetailTall")
-			if err != nil {
-				return err
-			}
-			err = downloadArtwork(album.Attributes.EditorialArtwork.StoreFlowcase, "StoreFlowcase")
-			if err != nil {
-				return err
-			}
-			err = downloadArtwork(album.Attributes.EditorialArtwork.SubscriptionHero, "SubscriptionHero")
-			if err != nil {
-				return err
-			}
-			err = downloadArtwork(album.Attributes.EditorialArtwork.SuperHeroTall, "SuperHeroTall")
-			if err != nil {
-				return err
-			}
-		}
-
-		if album.Attributes.EditorialVideo != nil {
-			err = downloadMotionVideo(album.Attributes.EditorialVideo.MotionSquareVideo1X1, "MotionSquareVideo1X1")
-			if err != nil {
-				return err
-			}
-			err = downloadMotionVideo(album.Attributes.EditorialVideo.MotionDetailSquare, "MotionDetailSquare")
-			if err != nil {
-				return err
-			}
-			err = downloadMotionVideo(album.Attributes.EditorialVideo.MotionDetailTall, "MotionDetailTall")
-			if err != nil {
-				return err
-			}
-		}
-
 	}
 
-	for _, track := range album.Relationships.Tracks.Data[20:] {
-		//_ = json.NewEncoder(os.Stdout).Encode(track)
-		discDir := fmt.Sprintf("Disc %d", *track.Attributes.DiscNumber)
+	if ctx.AppleMusic.Albums.Attributes.EditorialVideo != nil {
+		motionVideos := make(map[string]*applemusic.MotionVideo)
+		motionVideos["MotionSquareVideo1X1"] = ctx.AppleMusic.Albums.Attributes.EditorialVideo.MotionSquareVideo1X1
+		motionVideos["MotionDetailSquare"] = ctx.AppleMusic.Albums.Attributes.EditorialVideo.MotionDetailSquare
+		motionVideos["MotionDetailTall"] = ctx.AppleMusic.Albums.Attributes.EditorialVideo.MotionDetailTall
+
+		for _, motionVideo := range motionVideos {
+			if motionVideo == nil {
+				continue
+			}
+			name := path.Base(*motionVideo.Video)
+			name = name[:strings.LastIndex(name, ".")] + ExtMP4
+			_, err = DownloadMotionVideo(*motionVideo, fullPath.AlbumPath("Extras", "MotionVideos", name))
+		}
+	}
+
+	LOG.Info.Printf("Start to download %d tracks\n", len(ctx.AppleMusic.Albums.Relationships.Tracks.Data))
+
+	for _, track := range ctx.AppleMusic.Albums.Relationships.Tracks.Data {
+		LOG.Info.Println(strings.Repeat("=", 128))
+		LOG.Info.Printf("Downloading track: %d-%d %s", *track.Attributes.DiscNumber, *track.Attributes.TrackNumber, *track.Attributes.Name)
+		LOG.Info.Println("Track Info:")
+		LOG.Info.Printf("\t\t%16s:  %s", "Track Title", *track.Attributes.Name)
+		LOG.Info.Printf("\t\t%16s:  %s", "Artist Name", *track.Attributes.ArtistName)
+		LOG.Info.Printf("\t\t%16s:  %d", "Disc Number", *track.Attributes.DiscNumber)
+		LOG.Info.Printf("\t\t%16s:  %d", "Track Number", *track.Attributes.TrackNumber)
+		LOG.Info.Printf("\t\t%16s:  %s", "ISRC", *track.Attributes.Isrc)
+		if track.Attributes.WorkName != nil {
+			LOG.Info.Printf("\t\t%16s:  %s", "Work Name", *track.Attributes.WorkName)
+		}
+		LOG.Info.Printf("\t\t%16s:  %s", "Genre Names", strings.Join(track.Attributes.GenreNames, ", "))
+		LOG.Info.Println()
+
+		fullPath.DiscDir = fmt.Sprintf("Disc %d", *track.Attributes.DiscNumber)
 
 		switch *track.Type {
 		case "songs":
-
-			lyrics := ""
-			// Handling Lyrics
-			if *track.Attributes.HasLyrics {
-				ttml, err := applemusic.GetLyrics(*track.ID, token)
-				if err != nil {
-					return err
-				}
-				lyrics, err = extractTTML(ttml)
-				if err != nil {
-					return err
-				}
-
-				_, ttml, err = applemusic.GetSyllableLyrics(*track.ID, token)
-				if err != nil {
-					return err
-				}
-
-				lyricsName := fmt.Sprintf(
-					"%d-%d. %s.ttml",
-					*track.Attributes.DiscNumber,
-					*track.Attributes.TrackNumber,
-					utils.SanitizePath(*track.Attributes.Name))
-				lyricsPath := path.Join(targetPath, artistDir, albumDir, "Lyrics", lyricsName)
-
-				err = os.MkdirAll(path.Dir(lyricsPath), os.ModePerm)
-				if err != nil {
-					return err
-				}
-
-				err = os.WriteFile(lyricsPath, []byte(ttml), os.ModePerm)
-				if err != nil {
-					return err
+			ctx.AppleMusic.Songs = track.AsSongs()
+			if err = d.DownloadSong(*track.ID, ctx, fullPath); err != nil {
+				return
+			}
+			if track.Relationships.MusicVideos != nil && len(track.Relationships.MusicVideos.Data) > 0 {
+				LOG.Info.Println(strings.Repeat("=", 128))
+				LOG.Info.Printf("Downloading relative music videos: %d-%d %s", *track.Attributes.DiscNumber, *track.Attributes.TrackNumber, *track.Attributes.Name)
+				fullPath.DiscDir = "Music Videos"
+				for _, musicVideo := range track.Relationships.MusicVideos.Data {
+					LOG.Info.Println(strings.Repeat("=", 128))
+					LOG.Info.Printf("Downloading music videos: %s [%s]", *track.Attributes.Name, *track.Attributes.Isrc)
+					LOG.Info.Println("Track Info:")
+					LOG.Info.Printf("\t\t%16s:  %s", "Track Title", *track.Attributes.Name)
+					LOG.Info.Printf("\t\t%16s:  %s", "Artist Name", *track.Attributes.ArtistName)
+					LOG.Info.Printf("\t\t%16s:  %s", "ISRC", *track.Attributes.Isrc)
+					LOG.Info.Println()
+					ctx.AppleMusic.MusicVideos = &musicVideo
+					if err = d.DownloadMusicVideo(*musicVideo.ID, ctx, fullPath); err != nil {
+						return
+					}
 				}
 			}
-
-			trackName := fmt.Sprintf(
-				"%d. %s.m4a",
-				*track.Attributes.TrackNumber,
-				utils.SanitizePath(*track.Attributes.Name))
-			m4aPath := path.Join(targetPath, artistDir, albumDir, discDir, trackName)
-
-			err = os.MkdirAll(path.Dir(m4aPath), os.ModePerm)
-			if err != nil {
-				return err
-			}
-
-			info, err := GetITunesInfo[itunes.Song](*track.ID, "song", token)
-			if err != nil {
-				return err
-			}
-
-			err = downloadSong(m4aPath, info, &track, album, coverData, lyrics)
-			if err != nil {
-				return err
-			}
-
 		case "music-videos":
-
-			trackName := fmt.Sprintf(
-				"%d. %s.mp4",
-				*track.Attributes.TrackNumber,
-				utils.SanitizePath(*track.Attributes.Name))
-			mp4Path := path.Join(targetPath, artistDir, albumDir, discDir, trackName)
-
-			err = os.MkdirAll(path.Dir(mp4Path), os.ModePerm)
-			if err != nil {
-				return err
+			ctx.AppleMusic.MusicVideos = track.AsMusicVideos()
+			if err = d.DownloadMusicVideo(*track.ID, ctx, fullPath); err != nil {
+				return
 			}
-
-			info, err := GetITunesInfo[itunes.MusicVideo](*track.ID, "song", token)
-			if err != nil {
-				return err
-			}
-
-			webPlayback, err := applemusic.GetWebPlayback(*track.ID, token)
-			if err != nil {
-				return err
-			}
-			hlsPlaylistURL, err := fixURLParamLanguage(webPlayback.HlsPlaylistURL)
-			if err != nil {
-				return err
-			}
-
-			err = downloadMusicVideo(mp4Path, hlsPlaylistURL, info, webPlayback, &track, album, coverData, token)
-			if err != nil {
-				return err
-			}
-
 		default:
-			log.Warn.Printf("Type '%s' is not available to download", *track.Type)
+			LOG.Warn.Printf("Type '%s' is not available to download", *track.Type)
 		}
-
 	}
 
-	return nil
+	return
+}
+
+func (d *Downloader) DownloadSong(trackID string, ctx APIContext, fullPath FullPath) (err error) {
+
+	fullPath.TrackName = fmt.Sprintf(
+		"%d. %s",
+		*ctx.AppleMusic.Songs.Attributes.TrackNumber,
+		*ctx.AppleMusic.Songs.Attributes.Name)
+	fullPath.Ext = ExtM4A
+
+	if ctx.iTunes.Song == nil {
+		if ctx.iTunes.Song, err = itunes.GetITunesInfo[itunes.Song](trackID, "song"); err != nil {
+			return
+		}
+	}
+
+	if ctx.MZPlay.WebPlayback == nil {
+		if ctx.MZPlay.WebPlayback, err = applemusic.GetWebPlayback(trackID); err != nil {
+			return
+		}
+	}
+
+	var ttml, lyrics string
+	if *ctx.AppleMusic.Songs.Attributes.HasLyrics {
+		if err = d.DownloadLyrics(trackID, ctx, fullPath); err != nil {
+			return
+		}
+		if ttml, err = applemusic.GetLyrics(trackID); err != nil {
+			return
+		}
+		if lyrics, err = ttml2.ExtractTextFromTTML(ttml); err != nil {
+			return
+		}
+	}
+
+	var context = hlsutils.NewHTTPLiveStream(hlsutils.HLSParameters{
+		TempDir:           config.TempPath,
+		TargetPath:        fullPath.String(),
+		Type:              hlsutils.MediaTypeSong,
+		AdamID:            trackID,
+		MasterPlaylistURI: *ctx.AppleMusic.Songs.Attributes.ExtendedAssetUrls.EnhancedHls,
+		MetaData: metadata.LoadSongMetadata(metadata.Context{
+			WebPlayback:     ctx.MZPlay.WebPlayback,
+			AppleMusicSongs: ctx.AppleMusic.Songs,
+			AppleMusicAlbum: ctx.AppleMusic.Albums,
+			ItunesSong:      ctx.iTunes.Song,
+			CoverData:       ctx.AlbumCoverData,
+			LyricsData:      lyrics,
+		}),
+		IsEncrypted: true,
+	})
+	if err = context.Execute(); err == nil {
+		LOG.Info.Printf("Download completed, saved to: %s", fullPath.String())
+	}
+	return
+}
+
+func (d *Downloader) DownloadMusicVideo(trackID string, ctx APIContext, fullPath FullPath) (err error) {
+	var mvType metadata.MusicVideoType
+	if len(ctx.AppleMusic.MusicVideos.Relationships.Albums.Data) > 0 {
+		mvType = metadata.MusicVideoTypeAlbumRelated
+		fullPath.TrackName = fmt.Sprintf(
+			"%d. %s",
+			*ctx.AppleMusic.MusicVideos.Attributes.TrackNumber,
+			*ctx.AppleMusic.MusicVideos.Attributes.Name)
+	} else {
+		mvType = metadata.MusicVideoTypeSongsRelated
+		fullPath.TrackName = fmt.Sprintf(
+			"%s [%s]",
+			*ctx.AppleMusic.MusicVideos.Attributes.Name,
+			*ctx.AppleMusic.MusicVideos.Attributes.Isrc)
+	}
+	fullPath.Ext = ExtM4V
+
+	if ctx.iTunes.MusicVideo == nil {
+		if ctx.iTunes.MusicVideo, err = itunes.GetITunesInfo[itunes.MusicVideo](trackID, "song"); err != nil {
+			return
+		}
+	}
+
+	if ctx.MZPlay.WebPlayback == nil {
+		if ctx.MZPlay.WebPlayback, err = applemusic.GetWebPlayback(trackID); err != nil {
+			LOG.Error.Printf("failed to fetch HLS manifest: %v", err)
+			return nil
+		}
+	}
+
+	artwork := ctx.AppleMusic.MusicVideos.Attributes.Artwork
+
+	var coverData []byte
+	if artwork != nil {
+		if coverData, err = ReadCover(*artwork, path.Join(config.TempPath, FilenameFormatUUID)); err != nil {
+			return
+		}
+	}
+
+	var context = hlsutils.NewHTTPLiveStream(hlsutils.HLSParameters{
+		TempDir:     config.TempPath,
+		TargetPath:  fullPath.String(),
+		Type:        hlsutils.MediaTypeMusicVideo,
+		WebPlayback: ctx.MZPlay.WebPlayback,
+		MetaData: metadata.LoadMusicVideoMetadata(metadata.Context{
+			Type:                  mvType,
+			WebPlayback:           ctx.MZPlay.WebPlayback,
+			AppleMusicMusicVideos: ctx.AppleMusic.MusicVideos,
+			AppleMusicAlbum:       ctx.AppleMusic.Albums,
+			ItunesMusicVideo:      ctx.iTunes.MusicVideo,
+			CoverData:             coverData,
+		}),
+		IsEncrypted: true,
+	})
+	if err = context.Execute(); err == nil {
+		LOG.Info.Printf("Download completed, saved to: %s", fullPath.String())
+	}
+	return
+}
+
+func (d *Downloader) DownloadLyrics(trackID string, ctx APIContext, fullPath FullPath) (err error) {
+	var ttml string
+	if _, ttml, err = applemusic.GetSyllableLyrics(trackID); err != nil {
+		return err
+	}
+
+	lyricsPath := fullPath.AlbumPath("Lyrics", fmt.Sprintf(
+		"%d-%d. %s.ttml",
+		*ctx.AppleMusic.Songs.Attributes.DiscNumber,
+		*ctx.AppleMusic.Songs.Attributes.TrackNumber,
+		*ctx.AppleMusic.Songs.Attributes.Name))
+
+	if err = os.MkdirAll(path.Dir(lyricsPath), os.ModePerm); err != nil {
+		return
+	}
+
+	if err = os.WriteFile(lyricsPath, []byte(ttml), os.ModePerm); err != nil {
+		return
+	}
+
+	return
 }
 
 func main() {
-	const TargetPath = "Downloads"
+	var err error
+	applemusic.RefreshToken()
 
-	token, err := applemusic.GetToken()
+	// https://music.apple.com/cn/album/waking-up-deluxe-version/1446021230?l=en-GB&ls
+	// https://music.apple.com/cn/album/ghost-stories/829909653
+	// https://music.apple.com/cn/album/dreaming-out-loud/1489409642
+	// https://music.apple.com/cn/album/dreaming-out-loud/1445841529
+	albumID := "1446021230"
+
+	downloader := Downloader{
+		TargetPath: config.TargetPath,
+	}
+	if err = downloader.DownloadAlbum(albumID, APIContext{}, FullPath{}); err != nil {
+		panic(err)
+	}
+}
+
+func main1() {
+	applemusic.RefreshToken()
+	ID := "1446009426"
+
+	webPlayback, err := applemusic.GetWebPlayback(ID)
 	if err != nil {
 		panic(err)
 	}
 
-	albumIds := []string{
-		//"1592027684",
-		//"1781153619",
-		//"1445841529",
-		//"1641821680",
-		//"829909653",
-		//"1440831203",
-		"1770789137",
-	}
-
-	for _, id := range albumIds {
-		err := downloadAlbum(TargetPath, id, token)
-		if err != nil {
-			panic(err)
-		}
+	hls := hlsutils.NewHTTPLiveStream(hlsutils.HLSParameters{
+		Type:        hlsutils.MediaTypeMusicVideo,
+		WebPlayback: webPlayback,
+		TempDir:     config.TempPath,
+		TargetPath:  path.Join(config.TempPath, "a.m4v"),
+		IsEncrypted: true,
+	})
+	if err = hls.Execute(); err != nil {
+		panic(err)
 	}
 }
