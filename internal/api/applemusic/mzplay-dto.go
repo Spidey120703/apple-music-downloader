@@ -3,9 +3,10 @@ package applemusic
 import "time"
 
 type WebPlaybackResponse struct {
-	SongList     []WebPlaybackSong `json:"songList"`
-	ErrorMessage *string           `json:"errorMessage,omitempty"`
-	Status       int               `json:"status"`
+	SongList        []WebPlaybackSong `json:"songList"`
+	ErrorMessage    *string           `json:"errorMessage,omitempty"`
+	CustomerMessage *string           `json:"customerMessage,omitempty"`
+	Status          *int              `json:"status,omitempty"`
 }
 
 type WebPlaybackAssetMetadata struct {

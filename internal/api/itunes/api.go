@@ -25,7 +25,7 @@ func getITunesLookup(id string, entity string) (*LookupResponse, error) {
 	query := req.URL.Query()
 	query.Set("id", id)
 	query.Set("entity", entity)
-	query.Set("country", config.StoreFront)
+	query.Set("country", config.Storefront)
 	query.Set("lang", "en_us")
 	query.Set("limit", "100")
 	req.URL.RawQuery = query.Encode()
@@ -60,12 +60,6 @@ func GetITunesInfo[T IResult](id string, entity string) (*T, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	/*
-		if result.GetWrapperType() != "track" {
-			return nil, errors.New(fmt.Sprintf("invalid wrapper type: %s", result.GetWrapperType()))
-		}
-	*/
 
 	info := new(T)
 	err = json.Unmarshal(response.Results[0], &info)

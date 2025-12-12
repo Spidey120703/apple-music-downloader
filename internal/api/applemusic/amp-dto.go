@@ -2,6 +2,8 @@ package applemusic
 
 import "encoding/json"
 
+// https://developer.apple.com/documentation/applemusicapi
+
 type Resource struct {
 	ID   *string `json:"id"`
 	Type *string `json:"type"`
@@ -96,6 +98,13 @@ type EditorialArtwork struct {
 	SuperHeroTall         *Artwork `json:"superHeroTall,omitempty"`
 }
 
+type DescriptionAttribute struct {
+	Short    *string `json:"short,omitempty"`
+	Standard string  `json:"standard"`
+}
+
+/*************************** Albums ****************************/
+
 type Albums struct {
 	Resource
 	Attributes *struct {
@@ -132,6 +141,8 @@ type Albums struct {
 	Meta          *Meta          `json:"meta,omitempty"`
 }
 
+/*************************** Artists ****************************/
+
 type Artists struct {
 	Resource
 	Attributes *struct {
@@ -158,6 +169,8 @@ type Artists struct {
 	Relationships *Relationships `json:"relationships,omitempty"`
 	Meta          *Meta          `json:"meta,omitempty"`
 }
+
+/*************************** Songs ****************************/
 
 type Songs struct {
 	Resource
@@ -205,6 +218,8 @@ type SongsAttributes struct {
 	WorkName                  *string         `json:"workName,omitempty"`
 }
 
+/*************************** Credits ****************************/
+
 type Credits struct {
 	Resource
 	Attributes *struct {
@@ -226,15 +241,24 @@ type Credits struct {
 	} `json:"relationships,omitempty"`
 }
 
+/*************************** Genres ****************************/
+
 type Genres struct {
-	Resource
-	Attributes *struct {
-		Name       *string `json:"name,omitempty"`
-		ParentId   *string `json:"parentId,omitempty"`
-		ParentName *string `json:"parentName,omitempty"`
-		URL        *string `json:"url,omitempty"`
-	} `json:"attributes,omitempty"`
+	ID         string            `json:"id"`
+	Type       string            `json:"type"`
+	Href       string            `json:"href"`
+	Attributes *GenresAttributes `json:"attributes,omitempty"`
 }
+
+type GenresAttributes struct {
+	Name       string  `json:"name"`
+	ParentId   *string `json:"parentId,omitempty"`
+	ParentName *string `json:"parentName,omitempty"`
+	ChartLabel *string `json:"chartLabel,omitempty"`
+	URL        *string `json:"url,omitempty"`
+}
+
+/*************************** MusicVideos ****************************/
 
 type MusicVideos struct {
 	Resource
@@ -267,18 +291,21 @@ type MusicVideosAttributes struct {
 	WorkName         *string           `json:"workName,omitempty"`
 }
 
+/*************************** RecordLabels ****************************/
+
 type RecordLabels struct {
-	Resource
+	ID         string `json:"id"`
+	Type       string `json:"type"`
+	Href       string `json:"href"`
 	Attributes *struct {
-		Artwork     *Artwork `json:"artwork"`
-		Description *struct {
-			Short    *string `json:"short,omitempty"`
-			Standard *string `json:"standard"`
-		} `json:"description,omitempty"`
-		Name *string `json:"name"`
-		URL  *string `json:"url"`
+		Artwork     Artwork               `json:"artwork"`
+		Description *DescriptionAttribute `json:"description,omitempty"`
+		Name        string                `json:"name"`
+		URL         string                `json:"url"`
 	} `json:"attributes,omitempty"`
 }
+
+/*************************** Lyrics ****************************/
 
 type Lyrics struct {
 	Resource
@@ -293,6 +320,24 @@ type Lyrics struct {
 		TtmlLocalizations *string `json:"ttmlLocalizations,omitempty"`
 	} `json:"attributes,omitempty"`
 }
+
+/*************************** Storefronts ****************************/
+
+type Storefronts struct {
+	ID         string                 `json:"id"`
+	Type       string                 `json:"type"`
+	Href       string                 `json:"href"`
+	Attributes *StorefrontsAttributes `json:"attributes,omitempty"`
+}
+
+type StorefrontsAttributes struct {
+	DefaultLanguageTag    string   `json:"defaultLanguageTag"`
+	ExplicitContentPolicy string   `json:"explicitContentPolicy"`
+	Name                  string   `json:"name"`
+	SupportedLanguageTags []string `json:"supportedLanguageTags"`
+}
+
+/*************************** Tracks (Songs | MusicVideos) ****************************/
 
 // Tracks represents a mixed collection of Songs and MusicVideos
 type Tracks struct {
@@ -419,4 +464,14 @@ func (t *Tracks) AsMusicVideos() *MusicVideos {
 		},
 		Relationships: t.Relationships,
 	}
+}
+
+/*************************** Error ****************************/
+
+type Errors struct {
+	ID     string `json:"id"`
+	Title  string `json:"title"`
+	Detail string `json:"detail"`
+	Status string `json:"status"`
+	Code   string `json:"code"`
 }

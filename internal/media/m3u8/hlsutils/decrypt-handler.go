@@ -60,7 +60,7 @@ func (ctx *DecryptHandler) decryptEntry(entry *MediaPlaylistEntry) (err error) {
 		LOG.Info.Printf("Decrypting using Apple FairPlay CDM...")
 		entry.Decryptor = fairplay.New(ctx.AdamID)
 	case MediaTypeMusicVideo:
-		LOG.Info.Printf("Decrypting using Google Widevine CDM... (dynamic encryption detected: progress unavailable, speed depends on sample count)")
+		LOG.Info.Printf("Decrypting using Google Widevine CDM... (dynamic encryption detected: progress bar disabled, speed depends on sample count)")
 		entry.Decryptor = widevine.New()
 	default:
 	}
@@ -107,9 +107,6 @@ func (ctx *DecryptHandler) decryptSegments() (err error) {
 		if err = ctx.decryptEntry(entry); err != nil {
 			return
 		}
-
-		// f, _ := os.Create(fmt.Sprintf("Temp/a-%d", idx+1))
-		// panic(entry.Decryptor.Finalize(f)
 		LOG.Info.Println()
 	}
 	return err

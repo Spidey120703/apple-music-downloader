@@ -5,7 +5,7 @@ import (
 	"downloader/internal/config"
 	"downloader/internal/media/m3u8/hlsutils"
 	"downloader/internal/media/mp4/metadata"
-	utils2 "downloader/pkg/utils"
+	"downloader/pkg/utils"
 	"io"
 	"os"
 	"path"
@@ -22,7 +22,7 @@ func ReadCover(data applemusic.Artwork, coverPath string) ([]byte, error) {
 	if file, err = os.Open(coverPath); err != nil {
 		return nil, err
 	}
-	defer utils2.CloseQuietly(file)
+	defer utils.CloseQuietly(file)
 
 	return io.ReadAll(file)
 }
@@ -36,7 +36,7 @@ func DownloadArtwork(data applemusic.Artwork, artworkPath string) (string, error
 		"h": strconv.Itoa(*data.Height),
 	})
 
-	if artworkPath, err = utils2.DownloadFile(URL, artworkPath); err != nil && !os.IsExist(err) {
+	if artworkPath, err = utils.DownloadFile(URL, artworkPath); err != nil && !os.IsExist(err) {
 		return "", err
 	}
 	return artworkPath, nil

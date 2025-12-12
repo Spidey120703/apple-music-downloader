@@ -146,7 +146,7 @@ func download(url, dir string, p *mpb.Progress) (err error) {
 	filename := url[strings.LastIndex(url, "/")+1:]
 	filePath := path.Join(dir, filename)
 	if IsFileExists(filePath) {
-		LOG.Warn.Printf("File already exists: %s", filePath)
+		LOG.Warn.Printf("Using cache: %s", filePath)
 		return
 	}
 	if err = os.MkdirAll(path.Dir(filePath), os.ModePerm); err != nil {
@@ -162,7 +162,7 @@ func download(url, dir string, p *mpb.Progress) (err error) {
 	req.Header.Set("Referer", config.Referer)
 	req.Header.Set("Origin", config.Origin)
 
-	if resp, err = http.DefaultClient.Do(req); err != nil {
+	if resp, err = DefaultClient.Do(req); err != nil {
 		return fmt.Errorf("request failed: %w", err)
 	}
 	defer CloseQuietly(resp.Body)

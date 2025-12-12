@@ -10,9 +10,11 @@ import (
 	"downloader/internal/media/ttml"
 	"downloader/pkg/LOG"
 	"downloader/pkg/utils"
+	"errors"
 	"fmt"
 	"os"
 	"path"
+	"regexp"
 	"strings"
 )
 
@@ -102,7 +104,7 @@ func (d *Downloader) DownloadAlbum(albumID string, ctx APIContext, fullPath Full
 	LOG.Info.Printf("\t\t%16s:  %s", "UPC", *ctx.AppleMusic.Albums.Attributes.Upc)
 	LOG.Info.Println()
 
-	if ctx.AlbumCoverData, err = downloader.ReadCover(*ctx.AppleMusic.Albums.Attributes.Artwork, fullPath.AlbumPath("Cover")); err != nil {
+	if ctx.AlbumCoverData, err = downloader.ReadCover(*ctx.AppleMusic.Albums.Attributes.Artwork, fullPath.AlbumPath("Cover{original_file_ext}")); err != nil {
 		return
 	}
 
@@ -165,6 +167,7 @@ func (d *Downloader) DownloadAlbum(albumID string, ctx APIContext, fullPath Full
 			if err = d.DownloadSong(*track.ID, ctx, fullPath); err != nil {
 				return
 			}
+
 			if track.Relationships.MusicVideos != nil && len(track.Relationships.MusicVideos.Data) > 0 {
 				LOG.Info.Println(strings.Repeat("=", 128))
 				LOG.Info.Printf("Downloading relative music videos: %d-%d %s", *track.Attributes.DiscNumber, *track.Attributes.TrackNumber, *track.Attributes.Name)
@@ -212,20 +215,23 @@ func (d *Downloader) DownloadSong(trackID string, ctx APIContext, fullPath FullP
 
 	if ctx.MZPlay.WebPlayback == nil {
 		if ctx.MZPlay.WebPlayback, err = applemusic.GetWebPlayback(trackID); err != nil {
-			return
+			LOG.Error.Printf("failed to get MZPlay web playback assets: %v", err)
+			ctx.MZPlay.WebPlayback = &applemusic.WebPlaybackSong{}
 		}
 	}
 
 	var ttmlRaw, lyrics string
 	if *ctx.AppleMusic.Songs.Attributes.HasLyrics {
 		if err = d.DownloadLyrics(trackID, ctx, fullPath); err != nil {
-			return
+			LOG.Error.Printf("failed to download lyrics: %v", err)
 		}
 		if ttmlRaw, err = applemusic.GetLyrics(trackID); err != nil {
-			return
+			LOG.Error.Printf("failed to download lyrics: %v", err)
 		}
-		if lyrics, err = ttml.ExtractTextFromTTML(ttmlRaw); err != nil {
-			return
+		if ttmlRaw != "" {
+			if lyrics, err = ttml.ExtractTextFromTTML(ttmlRaw); err != nil {
+				return
+			}
 		}
 	}
 
@@ -334,6 +340,31 @@ func (d *Downloader) DownloadLyrics(trackID string, ctx APIContext, fullPath Ful
 	return
 }
 
+var AppleMusicURLPattern = regexp.MustCompile(`https://(?:beta.)?music.apple.com/(?P<storefront>[a-z]{2})/(?P<catalog_type>[a-z\-]+)/(?:[%0-9A-Za-z\-]+/)?(?P<data_id>[0-9]+|p\.[0-9A-Za-z]+)(?:\?.+?)?`)
+
+func (d *Downloader) Download(url string) (err error) {
+	submatches := utils.FindStringSubmatchMap(AppleMusicURLPattern, url)
+	if submatches == nil || submatches["data_id"] == "" {
+		return errors.New("invalid url")
+	}
+	if submatches["storefront"] != config.Storefront {
+		LOG.Warn.Printf("storefront mismatch, this may cause errors during processing")
+	}
+
+	switch submatches["catalog_type"] {
+	case "album":
+		return d.DownloadAlbum(submatches["data_id"], APIContext{}, FullPath{})
+	case "song":
+		fallthrough
+	case "artist":
+		fallthrough
+	case "music-video":
+		return fmt.Errorf("unsupport catalog type: %s", submatches["catalog_type"])
+	default:
+		return errors.New("invalid catalog type")
+	}
+}
+
 func main() {
 	var err error
 	applemusic.RefreshToken()
@@ -342,12 +373,16 @@ func main() {
 	// https://music.apple.com/cn/album/ghost-stories/829909653
 	// https://music.apple.com/cn/album/dreaming-out-loud/1489409642
 	// https://music.apple.com/cn/album/dreaming-out-loud/1445841529
-	albumID := "1446021230"
+	// albumID := "820166930"
+	//amURL := "https://music.apple.com/cn/album/dreaming-out-loud/1445841529"
+	//amURL := "https://music.apple.com/cn/album/i-am-gloria/1818540352?l=en-GB&ls"
+	//amURL := "https://music.apple.com/cn/album/1581087024"
+	amURL := "https://music.apple.com/cn/album/%E4%B8%87%E8%83%BD%E9%9D%92%E5%B9%B4%E6%97%85%E5%BA%97/1538548871"
 
 	amDownloader := Downloader{
 		TargetPath: config.TargetPath,
 	}
-	if err = amDownloader.DownloadAlbum(albumID, APIContext{}, FullPath{}); err != nil {
+	if err = amDownloader.Download(amURL); err != nil {
 		panic(err)
 	}
 }

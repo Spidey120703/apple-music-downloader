@@ -25,7 +25,7 @@ const (
 )
 
 const (
-	FilenameFormatUUID             = "{uuid}"
+	FilenameFormatUUID             = "{uuid}{original_file_ext}"
 	FilenameFormatOriginalFileName = "{original_filename}"
 	FilenameFormatNewFileName      = "{new_filename}"
 	FilenameFormatAvatarText       = "{avatar_text}"
@@ -59,7 +59,6 @@ func GetFormattedImageURLName(rawURL, format string, context map[string]string) 
 
 	if useOriginalExt {
 		finalURL = submatches[KeyUrlWithoutExt] + submatches[KeyOriginalFileExt] + submatches[KeyQueryString]
-		format = format + submatches[KeyOriginalFileExt]
 	} else {
 		format = format + submatches[KeyNewFileExt]
 	}
@@ -78,8 +77,11 @@ func FixLanguageQuery(playlistURL string) string {
 	if err != nil {
 		return playlistURL
 	}
+
+	lang := config.Language
+
 	query := parse.Query()
-	query.Set("l", "en")
+	query.Set("l", lang)
 	parse.RawQuery = query.Encode()
 
 	return parse.String()

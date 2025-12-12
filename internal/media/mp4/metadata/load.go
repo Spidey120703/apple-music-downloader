@@ -96,7 +96,7 @@ func LoadSongMetadata(ctx Context) (meta *Metadata) {
 		meta.ComposerID = atoi(assetMetadata.ComposerID)
 		meta.PlaylistID = atoi(assetMetadata.PlaylistID)
 		meta.GenreID = ref(uint32(assetMetadata.GenreID))
-		meta.StorefrontID = ref(uint32(quicktime.GetStoreFrontID(config.StoreFront)))
+		meta.StorefrontID = ref(uint32(quicktime.GetStorefrontID(config.Storefront)))
 		meta.MediaType = ref(uint8(quicktime.MediaTypeNormal_Music))
 		meta.PurchaseDate = nil
 		meta.SortName = &assetMetadata.SortName
@@ -136,7 +136,7 @@ func LoadSongMetadata(ctx Context) (meta *Metadata) {
 		meta.ComposerID = assign(atoi(*ctx.AppleMusicSongs.Relationships.Composers.Data[0].ID))
 		meta.PlaylistID = assign(ref(uint32(*ctx.ItunesSong.CollectionID)), atoi(*ctx.AppleMusicAlbum.ID))
 		meta.GenreID = assign(ref(uint32(quicktime.GetGenreID(ctx.AppleMusicSongs.Attributes.GenreNames))))
-		meta.StorefrontID = ref(uint32(quicktime.GetStoreFrontID(config.StoreFront)))
+		meta.StorefrontID = ref(uint32(quicktime.GetStorefrontID(config.Storefront)))
 		meta.MediaType = ref(uint8(quicktime.MediaTypeNormal_Music))
 		meta.PurchaseDate = nil
 		meta.SortName = assign(ctx.AppleMusicSongs.Attributes.Name, ctx.ItunesSong.TrackName)
@@ -187,7 +187,7 @@ func LoadMusicVideoMetadata(ctx Context) (meta *Metadata) {
 		meta.PlaylistID = assign(ref(uint32(*ctx.ItunesMusicVideo.CollectionID)), atoi(*ctx.AppleMusicAlbum.ID))
 	}
 	meta.GenreID = assign(ref(uint32(quicktime.GetGenreID(ctx.AppleMusicMusicVideos.Attributes.GenreNames))))
-	meta.StorefrontID = ref(uint32(quicktime.GetStoreFrontID(config.StoreFront)))
+	meta.StorefrontID = ref(uint32(quicktime.GetStorefrontID(config.Storefront)))
 	meta.HDVideo = nil
 	meta.MediaType = ref(uint8(quicktime.MediaTypeMusicVideo))
 	meta.PurchaseDate = nil

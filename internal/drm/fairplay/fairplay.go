@@ -1,6 +1,7 @@
 package fairplay
 
 import (
+	"downloader/internal/config"
 	"downloader/internal/media/mp4/mp4utils"
 	"downloader/pkg/utils"
 	"downloader/pkg/utils/barutils"
@@ -22,7 +23,7 @@ const (
 )
 
 func DecryptSample(samples []mp4utils.Sample, adamID string, keyURIs [][]byte) (err error) {
-	conn, err := net.Dial("tcp", "127.0.0.1:10020")
+	conn, err := net.Dial("tcp", config.FairPlayServerAddr)
 	if err != nil {
 		return
 	}

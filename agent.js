@@ -94,9 +94,7 @@ setTimeout(() => {
                 if (size === 0)
                     break;
                 const sample = await s.input.readAll(size);
-
                 decryptSample(kdContext.readPointer(), 5, sample.unwrap(), sample.unwrap(), sample.byteLength);
-
                 await s.output.writeAll(sample);
             }
         }
