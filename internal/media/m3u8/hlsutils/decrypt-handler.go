@@ -5,10 +5,10 @@ import (
 	"downloader/internal/drm/widevine"
 	"downloader/internal/media/mp4/cmaf"
 	"downloader/pkg/LOG"
+	"downloader/pkg/ansi"
 	"downloader/pkg/utils"
 	"errors"
 	"os"
-	"path"
 	"strings"
 )
 
@@ -16,32 +16,35 @@ type DecryptHandler struct {
 	*Context
 }
 
-func loadCaches(tempDir string, entry *MediaPlaylistEntry) (files []*os.File, err error) {
-	var fileList []string
-	for _, uri := range entry.URIs {
-		filePath := path.Join(tempDir, uri[strings.LastIndex(uri, "/")+1:])
-		fileList = append(fileList, filePath)
-	}
-	return utils.OpenFiles(fileList)
-}
-
-func (ctx *DecryptHandler) getKeys(entry *MediaPlaylistEntry) (keys [][]byte, err error) {
+func (ctx *DecryptHandler) getKeys(entry *MediaPlaylistEntry) (keys [][]byte, drm DrmType, err error) {
 	var key []byte
 	switch ctx.Type {
 	case MediaTypeSong:
-		if _, found := entry.KeyURIs[fairplay.KeyFormatString]; !found {
-			return nil, errors.New("key URI not found")
+		if _, found := entry.KeyURIs[fairplay.KeyFormatString]; found {
+			drm = DrmFairPlay
+			for _, keyURI := range entry.KeyURIs[fairplay.KeyFormatString] {
+				keys = append(keys, []byte(keyURI))
+			}
+			return
+		} else if _, found = entry.KeyURIs[widevine.KeyFormatString]; found {
+			// fallthrough
+		} else {
+			return nil, DrmNone, errors.New("key URI not found")
 		}
-		for _, keyURI := range entry.KeyURIs[fairplay.KeyFormatString] {
-			keys = append(keys, []byte(keyURI))
-		}
+		fallthrough
 	case MediaTypeMusicVideo:
 		if _, found := entry.KeyURIs[widevine.KeyFormatString]; !found {
-			return nil, errors.New("key URI not found")
+			return nil, DrmNone, errors.New("key URI not found")
 		}
 		var pssh string
 		for _, keyURI := range entry.KeyURIs[widevine.KeyFormatString] {
-			if pssh, err = widevine.GetPSSH("", keyURI[len("data:text/plain;base64,"):]); err != nil {
+			var keyBase64 string
+			if strings.HasPrefix(keyURI, "data:text/plain;base64,") {
+				keyBase64 = keyURI[len("data:text/plain;base64,"):]
+			} else if strings.HasPrefix(keyURI, "data:;base64,") {
+				keyBase64 = keyURI[len("data:;base64,"):]
+			}
+			if pssh, err = widevine.GetPSSH("", keyBase64); err != nil {
 				return
 			}
 			if key, err = widevine.GetKey(pssh, keyURI, ctx.WebPlayback); err != nil {
@@ -49,24 +52,15 @@ func (ctx *DecryptHandler) getKeys(entry *MediaPlaylistEntry) (keys [][]byte, er
 			}
 			keys = append(keys, key)
 		}
+		drm = DrmWidevine
 	default:
 	}
 	return
 }
 
 func (ctx *DecryptHandler) decryptEntry(entry *MediaPlaylistEntry) (err error) {
-	switch ctx.Type {
-	case MediaTypeSong:
-		LOG.Info.Printf("Decrypting using Apple FairPlay CDM...")
-		entry.Decryptor = fairplay.New(ctx.AdamID)
-	case MediaTypeMusicVideo:
-		LOG.Info.Printf("Decrypting using Google Widevine CDM... (dynamic encryption detected: progress bar disabled, speed depends on sample count)")
-		entry.Decryptor = widevine.New()
-	default:
-	}
-
 	var inputs []*os.File
-	if inputs, err = loadCaches(ctx.TempDir, entry); err != nil {
+	if inputs, err = utils.OpenFiles(entry.FilePaths); err != nil {
 		return
 	}
 	defer utils.CloseQuietlyAll(inputs)
@@ -75,9 +69,22 @@ func (ctx *DecryptHandler) decryptEntry(entry *MediaPlaylistEntry) (err error) {
 		return errors.New("empty media playlist")
 	}
 
+	var drm DrmType
 	var keys [][]byte
-	if keys, err = ctx.getKeys(entry); err != nil {
+
+	if keys, drm, err = ctx.getKeys(entry); err != nil {
 		return
+	}
+
+	switch drm {
+	case DrmFairPlay:
+		LOG.Info.Printf("Decrypting using Apple FairPlay CDM...")
+		entry.Decryptor = fairplay.New(ctx.AdamID)
+	case DrmWidevine:
+		LOG.Info.Printf("Decrypting using Google Widevine CDM...")
+		LOG.Info.Printf(ansi.CSIFgBrightBlack + "- Dynamic encryption detected: Progress bar disabled, speed depends on sample count." + ansi.CSIReset)
+		entry.Decryptor = widevine.New()
+	default:
 	}
 
 	if err = entry.Decryptor.Initialize(inputs[0]); err != nil {

@@ -1,8 +1,8 @@
 package fairplay
 
 import (
-	"downloader/internal/media/mp4/cmaf"
 	"downloader/internal/media/mp4/mp4utils"
+	"errors"
 
 	"github.com/Spidey120703/go-mp4"
 )
@@ -19,10 +19,6 @@ func New(adamID string) *Decryptor {
 	return d
 }
 
-func (d *Decryptor) DecryptSegment(seg *cmaf.Segment, keyURIs [][]byte) (err error) {
-	return d.DecryptContext.DecryptSegment(seg, keyURIs)
-}
-
 func (d *Decryptor) DecryptSample(schemeType string, samples []mp4utils.Sample, _ *mp4.Tenc, _ *mp4.Senc, keyURIs [][]byte) (err error) {
 	switch schemeType {
 	case "cbcs":
@@ -30,6 +26,8 @@ func (d *Decryptor) DecryptSample(schemeType string, samples []mp4utils.Sample, 
 		if err != nil {
 			return
 		}
+	default:
+		return errors.New("scheme is unsupported")
 	}
 	return
 }

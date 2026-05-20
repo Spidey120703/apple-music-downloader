@@ -1,7 +1,7 @@
 package itunes
 
 import (
-	"downloader/internal/api/applemusic"
+	"downloader/internal/api"
 	"downloader/internal/config"
 	"encoding/json"
 	"errors"
@@ -17,20 +17,15 @@ func getITunesLookup(id string, entity string) (*LookupResponse, error) {
 		panic(err)
 	}
 
-	req.Header.Set("Authorization", applemusic.Authorization)
-	req.Header.Set("User-Agent", config.UserAgent)
-	req.Header.Set("Origin", config.Origin)
-	req.Header.Set("Referer", config.Referer)
-
 	query := req.URL.Query()
 	query.Set("id", id)
 	query.Set("entity", entity)
-	query.Set("country", config.Storefront)
+	query.Set("country", config.Get().AppleMusic.Storefront)
 	query.Set("lang", "en_us")
 	query.Set("limit", "100")
 	req.URL.RawQuery = query.Encode()
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := api.Client().Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -51,12 +46,6 @@ func getITunesLookup(id string, entity string) (*LookupResponse, error) {
 
 func GetITunesInfo[T IResult](id string, entity string) (*T, error) {
 	response, err := getITunesLookup(id, entity)
-	if err != nil {
-		return nil, err
-	}
-
-	result := new(Result)
-	err = json.Unmarshal(response.Results[0], &result)
 	if err != nil {
 		return nil, err
 	}

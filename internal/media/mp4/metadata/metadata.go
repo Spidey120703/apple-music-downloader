@@ -158,9 +158,30 @@ func (m *Metadata) Walk(callback func(mp4.BoxType, *mp4.Data) error) (err error)
 
 func (m *Metadata) Attach(root *boxtree.BoxNode) (err error) {
 	var header *cmaf.Header
-	header, err = cmaf.InitializeHeader(root)
-	if err != nil {
-		return err
+	if header, err = cmaf.InitializeHeader(root); err != nil {
+		return
+	}
+
+	if header.Moov.Udta.Node == nil {
+		header.Moov.Udta.Node = &boxtree.BoxNode{
+			Info: &mp4.BoxInfo{Type: mp4.BoxTypeUdta(), Context: mp4.Context{}},
+			Box:  &mp4.Udta{},
+			Path: boxtree.ToAppendedPath(header.Moov.Node.Path, mp4.BoxTypeUdta()),
+		}
+
+		// Insert udta into moov if it doesn't already exist.
+		var hasUdta bool
+		for _, node := range header.Moov.Node.Children {
+			if node.Info.Type == mp4.BoxTypeUdta() {
+				hasUdta = true
+			}
+		}
+		if !hasUdta {
+			header.Moov.Node.Children = append(header.Moov.Node.Children, header.Moov.Udta.Node)
+			if err = header.Moov.Node.Caching(); err != nil {
+				return
+			}
+		}
 	}
 
 	meta := boxtree.BoxNode{
@@ -173,8 +194,8 @@ func (m *Metadata) Attach(root *boxtree.BoxNode) (err error) {
 		hdlr := boxtree.BoxNode{
 			Info: &mp4.BoxInfo{Type: mp4.BoxTypeHdlr(), Context: mp4.Context{UnderUdta: true}},
 			Box: &mp4.MetadataHandlerBox{
-				HandlerType: [4]byte{'m', 'd', 'i', 'r'},
-				Name:        [14]byte{'a', 'p', 'p', 'l'},
+				HandlerType: []byte{'m', 'd', 'i', 'r'},
+				Name:        []byte{'a', 'p', 'p', 'l'},
 			},
 			Path: boxtree.ToAppendedPath(meta.Path, mp4.BoxTypeHdlr()),
 		}

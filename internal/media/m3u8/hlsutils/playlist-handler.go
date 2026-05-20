@@ -176,8 +176,19 @@ func (ctx *PlaylistHandler) extractKeyURIs() (err error) {
 		entry.KeyURIs = make(map[string][]string)
 		for _, segment := range entry.MediaPlaylist.GetAllSegments() {
 			for _, key := range segment.Keys {
-				if !slices.Contains(entry.KeyURIs[key.Keyformat], key.URI) {
-					entry.KeyURIs[key.Keyformat] = append(entry.KeyURIs[key.Keyformat], key.URI)
+				switch key.Method {
+				case "SAMPLE-AES":
+					if !slices.Contains(entry.KeyURIs[key.Keyformat], key.URI) {
+						entry.KeyURIs[key.Keyformat] = append(entry.KeyURIs[key.Keyformat], key.URI)
+					}
+				case "ISO-23001-7":
+					var keyformat = key.Keyformat
+					if keyformat == "" {
+						keyformat = "urn:uuid:edef8ba9-79d6-4ace-a3c8-27dcd51d21ed"
+					}
+					if !slices.Contains(entry.KeyURIs[keyformat], key.URI) {
+						entry.KeyURIs[keyformat] = append(entry.KeyURIs[keyformat], key.URI)
+					}
 				}
 			}
 		}
@@ -203,6 +214,10 @@ func (ctx *PlaylistHandler) downloadSegments() (err error) {
 		if err = utils.MultiDownload(entry.URIs, ctx.TempDir, config.NumThreads); err != nil {
 			return
 		}
+
+		for _, URI := range entry.URIs {
+			entry.FilePaths = append(entry.FilePaths, utils.GetSavePath(URI, ctx.TempDir))
+		}
 	}
 
 	LOG.Info.Println("Download completed.")
@@ -210,14 +225,16 @@ func (ctx *PlaylistHandler) downloadSegments() (err error) {
 }
 
 func (ctx *PlaylistHandler) Execute() (err error) {
-	if err = ctx.loadMasterPlaylist(); err != nil {
-		return
-	}
-	if err = ctx.extractSessionData(); err != nil {
-		return
-	}
-	if err = ctx.selectVariant(); err != nil {
-		return
+	if ctx.MasterPlaylistURI != "" {
+		if err = ctx.loadMasterPlaylist(); err != nil {
+			return
+		}
+		if err = ctx.extractSessionData(); err != nil {
+			return
+		}
+		if err = ctx.selectVariant(); err != nil {
+			return
+		}
 	}
 	if err = ctx.loadMediaPlaylist(); err != nil {
 		return

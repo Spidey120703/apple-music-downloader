@@ -1,4 +1,4 @@
-   syntax = "proto2";
+syntax = "proto2";
 
 option go_package = "internal/drm/widevine/cdm;cdm";
 

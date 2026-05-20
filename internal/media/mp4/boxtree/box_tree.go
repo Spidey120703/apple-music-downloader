@@ -144,6 +144,10 @@ func ToAppendedPath(path mp4.BoxPath, boxType ...mp4.BoxType) (target mp4.BoxPat
 }
 
 func Unmarshal(reader io.ReadSeeker) (*BoxNode, error) {
+	return UnmarshalWithContext(reader, mp4.Context{})
+}
+
+func UnmarshalWithContext(reader io.ReadSeeker, ctx mp4.Context) (*BoxNode, error) {
 	var convert = func(any []interface{}) []*BoxNode {
 		if len(any) == 0 {
 			return nil
@@ -172,7 +176,7 @@ func Unmarshal(reader io.ReadSeeker) (*BoxNode, error) {
 		}
 		return node, nil
 	}
-	if vals, err := mp4.ReadBoxStructure(reader, handler); err != nil {
+	if vals, err := mp4.ReadBoxStructureWithContext(reader, ctx, handler); err != nil {
 		return nil, err
 	} else {
 		children := convert(vals)

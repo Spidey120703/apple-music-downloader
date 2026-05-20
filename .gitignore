@@ -14,6 +14,9 @@ Thumbs.db
 /References/
 /bin/
 
+# Config Files
+config.yaml
+
 # Media Files
 *.mp4
 *.m4v

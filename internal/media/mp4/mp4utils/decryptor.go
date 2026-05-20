@@ -153,7 +153,7 @@ func (ctx *DecryptContext) DecryptFragment(moof cmaf.MovieFragmentBox, mdat *mp4
 			continue
 		}
 		schemeType := string(cryptoInfo.Sinf.Schm.SchemeType[:])
-		if schemeType != "cbcs" {
+		if schemeType != "cbcs" && schemeType != "cenc" {
 			return fmt.Errorf("unsupported scheme type: %s", schemeType)
 		}
 		if err = ctx.DecryptSample(schemeType, samples, cryptoInfo.Sinf.Schi.Tenc, traf.Senc, keys); err != nil {

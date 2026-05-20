@@ -3,6 +3,7 @@ package quicktime
 import (
 	"downloader/internal/api/applemusic"
 	"downloader/pkg/LOG"
+	"downloader/pkg/locale"
 	"strconv"
 )
 
@@ -87,6 +88,9 @@ func GetGenreID(genreNames []string) int {
 	}
 	for _, genre := range Genres {
 		if genre.Name == genreNames[0] {
+			return genre.ID
+		}
+		if genre.Name == locale.TranslateFromZhCN(genreNames[0]) {
 			return genre.ID
 		}
 	}

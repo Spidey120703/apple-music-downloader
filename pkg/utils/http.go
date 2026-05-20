@@ -16,14 +16,29 @@ import (
 	"github.com/vbauerster/mpb/v8"
 )
 
-var DefaultClient *http.Client
+type Transport struct {
+	base http.RoundTripper
+}
 
-func init() {
-	DefaultClient = &http.Client{
-		Transport: &http.Transport{
-			Proxy: http.ProxyFromEnvironment,
-		},
+func (t *Transport) RoundTrip(req *http.Request) (resp *http.Response, err error) {
+	cfg := config.Get().Network.HTTP
+
+	req.Header.Set("User-Agent", cfg.UserAgent)
+	req.Header.Set("Referer", cfg.Referer)
+	req.Header.Set("Origin", cfg.Origin)
+	req.Header.Set("Cache-Control", "no-cache")
+
+	base := t.base
+	if base == nil {
+		base = http.DefaultTransport
 	}
+	return base.RoundTrip(req)
+}
+
+var Client = &http.Client{
+	Transport: &Transport{
+		base: http.DefaultTransport,
+	},
 }
 
 func DownloadFile(url string, targetPath string) (string, error) {
@@ -56,12 +71,7 @@ func DownloadFile(url string, targetPath string) (string, error) {
 		return "", err
 	}
 
-	req.Header.Set("User-Agent", config.UserAgent)
-	req.Header.Set("Cache-Control", "no-cache")
-	req.Header.Set("Referer", config.Referer)
-	req.Header.Set("Origin", config.Origin)
-
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := Client.Do(req)
 
 	if err != nil {
 		return "", err
@@ -131,6 +141,7 @@ func MultiDownload(urls []string, dir string, numThreads int) error {
 		}(url)
 	}
 
+	wg.Wait()
 	p.Wait()
 	close(ec)
 
@@ -158,11 +169,8 @@ func download(url, dir string, p *mpb.Progress) (err error) {
 	if req, err = http.NewRequest(http.MethodGet, url, nil); err != nil {
 		return
 	}
-	req.Header.Set("User-Agent", config.UserAgent)
-	req.Header.Set("Referer", config.Referer)
-	req.Header.Set("Origin", config.Origin)
 
-	if resp, err = DefaultClient.Do(req); err != nil {
+	if resp, err = Client.Do(req); err != nil {
 		return fmt.Errorf("request failed: %w", err)
 	}
 	defer CloseQuietly(resp.Body)
@@ -185,10 +193,16 @@ func download(url, dir string, p *mpb.Progress) (err error) {
 	if output, err = os.Create(filePath); err != nil {
 		return fmt.Errorf("create output failed: %w", err)
 	}
+	defer CloseQuietly(output)
+
 	if _, err = io.Copy(output, proxyReader); err != nil {
-		_ = os.Remove(filename)
+		_ = os.Remove(filePath)
 		return
 	}
 
 	return
+}
+
+func GetSavePath(url, dir string) string {
+	return path.Join(dir, url[strings.LastIndex(url, "/")+1:])
 }

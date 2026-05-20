@@ -1,4 +1,4 @@
-package applemusic
+package api
 
 import (
 	"downloader/internal/config"
@@ -10,15 +10,9 @@ import (
 	"regexp"
 )
 
-var Authorization string
-
-func SetAuthorization(token string) {
-	Authorization = "Bearer " + token
-}
-
-func GetToken() (string, error) {
+func loadToken() (string, error) {
 	const baseUrl = "https://beta.music.apple.com"
-	index, _ := url.JoinPath(baseUrl, config.Storefront)
+	index, _ := url.JoinPath(baseUrl, config.Get().AppleMusic.Storefront)
 	resp, err := http.Get(index)
 	if err != nil {
 		return "", err
@@ -63,10 +57,15 @@ func GetToken() (string, error) {
 	return token, nil
 }
 
-func RefreshToken() {
-	token, err := GetToken()
-	if err != nil {
+var token string
+
+func RefreshToken() (err error) {
+	if token, err = loadToken(); err != nil {
 		panic(err)
 	}
-	SetAuthorization(token)
+	return
+}
+
+func Authorization() string {
+	return "Bearer " + token
 }

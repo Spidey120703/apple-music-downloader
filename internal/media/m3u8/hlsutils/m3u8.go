@@ -17,11 +17,20 @@ const (
 	MediaTypeMusicVideo
 )
 
+type DrmType int
+
+const (
+	DrmNone DrmType = iota
+	DrmWidevine
+	DrmFairPlay
+)
+
 type HLSParameters struct {
 	TempDir           string
 	TargetPath        string
 	Type              MediaType
 	MasterPlaylistURI string
+	MediaPlaylistURI  string
 	AdamID            string
 	WebPlayback       *applemusic.WebPlaybackSong
 	MetaData          *metadata.Metadata
@@ -33,6 +42,7 @@ type MediaPlaylistEntry struct {
 	MediaPlaylist    *m3u8.MediaPlaylist
 	KeyURIs          map[string][]string
 	URIs             []string
+	FilePaths        []string
 	Readers          io.ReadSeeker
 	Decryptor        mp4utils.IDecryptor
 	Muxer            *mp4utils.MuxContext
@@ -65,7 +75,17 @@ func NewHTTPLiveStream(p HLSParameters) (ctx *Context) {
 	ctx = &Context{}
 	ctx.Type = p.Type
 	ctx.AdamID = p.AdamID
-	ctx.MasterPlaylistURI = p.MasterPlaylistURI
+	if len(p.MasterPlaylistURI) != 0 {
+		ctx.MasterPlaylistURI = p.MasterPlaylistURI
+	} else if len(p.MediaPlaylistURI) != 0 {
+		ctx.MediaPlaylistEntries = []*MediaPlaylistEntry{
+			{
+				MediaPlaylistURI: p.MediaPlaylistURI,
+			},
+		}
+	} else {
+		// panic: no need to panic
+	}
 	ctx.TempDir = p.TempDir
 	ctx.TargetPath = p.TargetPath
 	ctx.WebPlayback = p.WebPlayback

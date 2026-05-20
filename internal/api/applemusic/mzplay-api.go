@@ -2,6 +2,7 @@ package applemusic
 
 import (
 	"bytes"
+	"downloader/internal/api"
 	"downloader/internal/config"
 	"downloader/pkg/utils"
 	"encoding/base64"
@@ -27,13 +28,9 @@ func GetWebPlayback(id string) (*WebPlaybackSong, error) {
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", Authorization)
-	req.Header.Set("User-Agent", config.UserAgent)
-	req.Header.Set("Origin", config.Origin)
-	req.Header.Set("Referer", config.Referer)
-	req.Header.Set("X-Apple-Music-User-Token", config.MediaUserToken)
+	req.Header.Set("X-Apple-Music-User-Token", config.Get().AppleMusic.MediaUserToken)
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := api.Client().Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -70,13 +67,9 @@ func PostWebPlaybackLicense(url string, licenseRequest WebPlaybackLicenseRequest
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", Authorization)
-	req.Header.Set("User-Agent", config.UserAgent)
-	req.Header.Set("Origin", config.Origin)
-	req.Header.Set("Referer", config.Referer)
-	req.Header.Set("X-Apple-Music-User-Token", config.MediaUserToken)
+	req.Header.Set("X-Apple-Music-User-Token", config.Get().AppleMusic.MediaUserToken)
 
-	do, err := http.DefaultClient.Do(req)
+	do, err := api.Client().Do(req)
 	if err != nil {
 		return nil, err
 	}

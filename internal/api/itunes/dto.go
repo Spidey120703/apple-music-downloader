@@ -13,12 +13,9 @@ type IResult interface {
 	GetWrapperType() string
 }
 
-type Result struct {
-	WrapperType string `json:"wrapperType"`
-}
-
-func (s Result) GetWrapperType() string {
-	return s.WrapperType
+type ITrackLike interface {
+	IResult
+	GetKind() string
 }
 
 type Song struct {
@@ -59,6 +56,10 @@ func (s Song) GetWrapperType() string {
 	return *s.WrapperType
 }
 
+func (s Song) GetKind() string {
+	return *s.Kind
+}
+
 type MusicVideo struct {
 	WrapperType            *string  `json:"wrapperType"`
 	Kind                   *string  `json:"kind"`
@@ -92,8 +93,12 @@ type MusicVideo struct {
 	PrimaryGenreName       *string  `json:"primaryGenreName"`
 }
 
-func (s MusicVideo) GetWrapperType() string {
-	return *s.WrapperType
+func (mv MusicVideo) GetWrapperType() string {
+	return *mv.WrapperType
+}
+
+func (mv MusicVideo) GetKind() string {
+	return *mv.Kind
 }
 
 type Album struct {
@@ -119,8 +124,8 @@ type Album struct {
 	PrimaryGenreName       *string  `json:"primaryGenreName"`
 }
 
-func (s Album) GetWrapperType() string {
-	return *s.WrapperType
+func (a Album) GetWrapperType() string {
+	return *a.WrapperType
 }
 
 type Composer struct {
@@ -134,6 +139,6 @@ type Composer struct {
 	PrimaryGenreID   *int    `json:"primaryGenreId"`
 }
 
-func (s *Composer) GetWrapperType() string {
-	return *s.WrapperType
+func (c *Composer) GetWrapperType() string {
+	return *c.WrapperType
 }

@@ -32,7 +32,7 @@ const (
 )
 
 func GetFormattedImageURLName(rawURL, format string, context map[string]string) (finalURL string, filename string) {
-	useOriginalExt := config.UseOriginalExt
+	useOriginalExt := config.Get().Storage.UseOriginalExt
 
 	finalURL = utils.Format(rawURL, context)
 	submatches := utils.FindStringSubmatchMap(ImageURLPattern, finalURL)
@@ -78,7 +78,7 @@ func FixLanguageQuery(playlistURL string) string {
 		return playlistURL
 	}
 
-	lang := config.Language
+	lang := config.Get().AppleMusic.Language
 
 	query := parse.Query()
 	query.Set("l", lang)

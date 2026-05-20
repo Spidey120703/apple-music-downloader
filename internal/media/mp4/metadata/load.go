@@ -41,8 +41,8 @@ func genre(id int) (raw []byte) {
 type MusicVideoType int
 
 const (
-	MusicVideoTypeAlbumRelated MusicVideoType = iota
-	MusicVideoTypeSongsRelated
+	MusicVideoTypeFromAlbum MusicVideoType = iota + 1
+	MusicVideoFromSongs
 )
 
 type Context struct {
@@ -96,7 +96,7 @@ func LoadSongMetadata(ctx Context) (meta *Metadata) {
 		meta.ComposerID = atoi(assetMetadata.ComposerID)
 		meta.PlaylistID = atoi(assetMetadata.PlaylistID)
 		meta.GenreID = ref(uint32(assetMetadata.GenreID))
-		meta.StorefrontID = ref(uint32(quicktime.GetStorefrontID(config.Storefront)))
+		meta.StorefrontID = ref(uint32(quicktime.GetStorefrontID(config.Get().AppleMusic.Storefront)))
 		meta.MediaType = ref(uint8(quicktime.MediaTypeNormal_Music))
 		meta.PurchaseDate = nil
 		meta.SortName = &assetMetadata.SortName
@@ -136,7 +136,7 @@ func LoadSongMetadata(ctx Context) (meta *Metadata) {
 		meta.ComposerID = assign(atoi(*ctx.AppleMusicSongs.Relationships.Composers.Data[0].ID))
 		meta.PlaylistID = assign(ref(uint32(*ctx.ItunesSong.CollectionID)), atoi(*ctx.AppleMusicAlbum.ID))
 		meta.GenreID = assign(ref(uint32(quicktime.GetGenreID(ctx.AppleMusicSongs.Attributes.GenreNames))))
-		meta.StorefrontID = ref(uint32(quicktime.GetStorefrontID(config.Storefront)))
+		meta.StorefrontID = ref(uint32(quicktime.GetStorefrontID(config.Get().AppleMusic.Storefront)))
 		meta.MediaType = ref(uint8(quicktime.MediaTypeNormal_Music))
 		meta.PurchaseDate = nil
 		meta.SortName = assign(ctx.AppleMusicSongs.Attributes.Name, ctx.ItunesSong.TrackName)
@@ -156,13 +156,15 @@ func LoadMusicVideoMetadata(ctx Context) (meta *Metadata) {
 	meta = &Metadata{}
 	meta.Title = assign(ctx.AppleMusicMusicVideos.Attributes.Name, ctx.ItunesMusicVideo.TrackName)
 	meta.ArtistName = assign(ctx.AppleMusicMusicVideos.Attributes.ArtistName, ctx.ItunesMusicVideo.ArtistName)
-	if ctx.Type == MusicVideoTypeAlbumRelated {
+	if ctx.Type == MusicVideoTypeFromAlbum {
 		meta.PlaylistArtist = assign(ctx.AppleMusicAlbum.Attributes.ArtistName)
 		meta.AlbumName = assign(ctx.AppleMusicMusicVideos.Attributes.AlbumName, ctx.AppleMusicAlbum.Attributes.Name, ctx.ItunesMusicVideo.CollectionName)
+	} else {
+		meta.AlbumName = assign(ctx.AppleMusicMusicVideos.Attributes.AlbumName, ctx.ItunesMusicVideo.CollectionName)
 	}
 	meta.Work = assign(ctx.AppleMusicMusicVideos.Attributes.WorkName)
 	meta.Genre = genre(quicktime.GetGenreID(ctx.AppleMusicMusicVideos.Attributes.GenreNames))
-	if ctx.Type == MusicVideoTypeAlbumRelated {
+	if ctx.Type == MusicVideoTypeFromAlbum {
 		meta.Track = &Track{
 			TrackNumber: uint32(*assign(ctx.AppleMusicMusicVideos.Attributes.TrackNumber, ctx.ItunesMusicVideo.TrackNumber)),
 			TrackCount:  uint16(*ctx.ItunesMusicVideo.TrackCount),
@@ -177,22 +179,22 @@ func LoadMusicVideoMetadata(ctx Context) (meta *Metadata) {
 	meta.ReleaseDate = assign(ctx.ItunesMusicVideo.ReleaseDate, ctx.AppleMusicMusicVideos.Attributes.ReleaseDate)
 	meta.AppleID = nil
 	meta.Owner = nil
-	if ctx.Type == MusicVideoTypeAlbumRelated {
+	if ctx.Type == MusicVideoTypeFromAlbum {
 		meta.Copyright = assign(ctx.AppleMusicAlbum.Attributes.Copyright)
 	}
 	meta.ItemID = assign(atoi(*ctx.AppleMusicMusicVideos.ID), ref(uint32(*ctx.ItunesMusicVideo.TrackID)))
 	meta.ArtistID = assign(ref(uint32(*ctx.ItunesMusicVideo.ArtistID)), atoi(*ctx.AppleMusicMusicVideos.Relationships.Artists.Data[0].ID))
 	meta.Rating = ref(uint8(0))
-	if ctx.Type == MusicVideoTypeAlbumRelated {
+	if ctx.Type == MusicVideoTypeFromAlbum {
 		meta.PlaylistID = assign(ref(uint32(*ctx.ItunesMusicVideo.CollectionID)), atoi(*ctx.AppleMusicAlbum.ID))
 	}
 	meta.GenreID = assign(ref(uint32(quicktime.GetGenreID(ctx.AppleMusicMusicVideos.Attributes.GenreNames))))
-	meta.StorefrontID = ref(uint32(quicktime.GetStorefrontID(config.Storefront)))
+	meta.StorefrontID = ref(uint32(quicktime.GetStorefrontID(config.Get().AppleMusic.Storefront)))
 	meta.HDVideo = nil
 	meta.MediaType = ref(uint8(quicktime.MediaTypeMusicVideo))
 	meta.PurchaseDate = nil
 	meta.SortName = assign(ctx.AppleMusicMusicVideos.Attributes.Name, ctx.ItunesMusicVideo.TrackName)
-	if ctx.Type == MusicVideoTypeAlbumRelated {
+	if ctx.Type == MusicVideoTypeFromAlbum {
 		meta.SortAlbum = assign(ctx.AppleMusicMusicVideos.Attributes.AlbumName, ctx.AppleMusicAlbum.Attributes.Name, ctx.ItunesMusicVideo.CollectionName)
 	}
 	meta.SortArtist = assign(ctx.AppleMusicMusicVideos.Attributes.ArtistName, ctx.ItunesMusicVideo.ArtistName)

@@ -20,7 +20,7 @@ func (ctx *MuxHandler) initializeMux() (err error) {
 		} else {
 			if err = func() (err error) {
 				var inputs []*os.File
-				if inputs, err = loadCaches(ctx.TempDir, entry); err != nil {
+				if inputs, err = utils.OpenFiles(entry.FilePaths); err != nil {
 					return
 				}
 				defer utils.CloseQuietlyAll(inputs)

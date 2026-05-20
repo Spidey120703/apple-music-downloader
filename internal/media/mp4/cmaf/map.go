@@ -240,7 +240,9 @@ func InitializeHeader(root *boxtree.BoxNode) (hdr *Header, err error) {
 	}
 
 	udta, _ := root.P("moov.udta")
-	hdr.Moov.Udta.Node = udta[0]
+	if len(udta) > 0 {
+		hdr.Moov.Udta.Node = udta[0]
+	}
 
 	assignOnce(root, &hdr.Moov.Udta.Swre, "moov.udta.swre")
 	assignMore(root, &hdr.Moov.Mvex.Trex, "moov.mvex.trex")

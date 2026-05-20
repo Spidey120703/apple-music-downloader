@@ -23,7 +23,7 @@ const (
 )
 
 func DecryptSample(samples []mp4utils.Sample, adamID string, keyURIs [][]byte) (err error) {
-	conn, err := net.Dial("tcp", config.FairPlayServerAddr)
+	conn, err := net.Dial("tcp", config.Get().Network.FairPlay.ServerAddr)
 	if err != nil {
 		return
 	}

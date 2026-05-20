@@ -7,9 +7,8 @@ import (
 )
 
 func CloseQuietly(closer io.Closer) {
-	err := closer.Close()
-	if err != nil {
-		LOG.Info.Panic(err)
+	if err := closer.Close(); err != nil {
+		LOG.Error.Println(err)
 	}
 }
 

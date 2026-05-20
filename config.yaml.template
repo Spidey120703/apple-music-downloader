@@ -1,0 +1,13 @@
+storage.target_path: ./Downloads/
+storage.temp_path: ./Temp/
+storage.use_original_ext: true
+network.fairplay.server_addr: 127.0.0.1:10020
+network.http.user_agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36
+#network.http.user_agent: AMPLibraryAgent/1.6 (Windows 10.0.26120 x64; x64) Chromium/128.0.2739.63 build/112 (dt:2)
+#network.http.user_agent: Music/1.6 (Windows 10.0.26120 x64; x64) Chromium/128.0.2739.63 build/112 (dt:2)
+network.http.origin: https://beta.music.apple.com
+network.http.referer: https://beta.music.apple.com/
+network.num_threads: 5
+apple_music.storefront: cn
+apple_music.language: zh-Hans-CN
+#apple_music.media_user_token: 0.AXxX==

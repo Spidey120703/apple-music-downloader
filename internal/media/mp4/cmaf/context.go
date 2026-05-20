@@ -15,13 +15,17 @@ type IContext interface {
 }
 
 type Context struct {
-	Root     *boxtree.BoxNode
-	Header   *Header
-	Segments []*Segment
+	mp4Context mp4.Context
+	Root       *boxtree.BoxNode
+	Header     *Header
+	Segments   []*Segment
 }
 
 func (ctx *Context) Initialize(input io.ReadSeeker) (err error) {
-	if ctx.Root, err = boxtree.Unmarshal(input); err != nil {
+	ctx.mp4Context = mp4.Context{
+		Crypto: mp4.NewCryptoContext(),
+	}
+	if ctx.Root, err = boxtree.UnmarshalWithContext(input, ctx.mp4Context); err != nil {
 		return
 	}
 	if ctx.Header, err = InitializeHeader(ctx.Root); err != nil {
@@ -38,7 +42,7 @@ func (ctx *Context) Finalize(output io.WriteSeeker) (err error) {
 
 func (ctx *Context) MergeSegment(input io.ReadSeeker) (seg *Segment, err error) {
 	var root *boxtree.BoxNode
-	if root, err = boxtree.Unmarshal(input); err != nil {
+	if root, err = boxtree.UnmarshalWithContext(input, ctx.mp4Context); err != nil {
 		return
 	}
 	if seg, err = InitializeSegment(root); err != nil {

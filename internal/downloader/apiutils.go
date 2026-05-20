@@ -43,14 +43,14 @@ func DownloadArtwork(data applemusic.Artwork, artworkPath string) (string, error
 }
 
 func DownloadMotionVideo(data applemusic.MotionVideo, videoPath string) (string, error) {
-	previewData, err := ReadCover(*data.PreviewFrame, path.Join(config.TempPath, FilenameFormatUUID))
+	previewData, err := ReadCover(*data.PreviewFrame, path.Join(config.Get().Storage.TempPath, FilenameFormatUUID))
 	if err != nil {
 		return "", err
 	}
 
 	hls := hlsutils.NewHTTPLiveStream(hlsutils.HLSParameters{
 		MasterPlaylistURI: *data.Video,
-		TempDir:           config.TempPath,
+		TempDir:           config.Get().Storage.TempPath,
 		TargetPath:        videoPath,
 		MetaData: &metadata.Metadata{
 			Cover: previewData,
