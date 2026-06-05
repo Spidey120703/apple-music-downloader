@@ -5,6 +5,7 @@ import (
 	"downloader/internal/drm/widevine/cdm"
 	"encoding/base64"
 	"errors"
+	"fmt"
 
 	"google.golang.org/protobuf/proto"
 )
@@ -14,8 +15,12 @@ const (
 	KeyFormatString    = "urn:uuid:edef8ba9-79d6-4ace-a3c8-27dcd51d21ed"
 )
 
-// GetPSSH - Get PSSH (Protection System Specific Header) of HLS
-func GetPSSH(contentId, keyIdBase64 string) (string, error) {
+var SystemID = []byte("0123456789abcdef0123456789abcdef")
+
+// GeneratePSSH generates a Widevine PSSH (Protection System Specific Header) box.
+// This is required to initialize the CDM when playing HLS content encrypted
+// with Widevine, allowing the CDM to construct the necessary license challenge.
+func GeneratePSSH(contentId, keyIdBase64 string) (string, error) {
 	keyId, err := base64.StdEncoding.DecodeString(keyIdBase64)
 	if err != nil {
 		return "", err
@@ -30,11 +35,15 @@ func GetPSSH(contentId, keyIdBase64 string) (string, error) {
 	}
 	widevineCencHeaderProtobuf, err := proto.Marshal(widevineCencHeader)
 
-	widevineCenc := append([]byte("0123456789abcdef0123456789abcdef"), widevineCencHeaderProtobuf...)
+	widevineCenc := append(SystemID, widevineCencHeaderProtobuf...)
 	pssh := base64.StdEncoding.EncodeToString(widevineCenc)
 	return pssh, nil
 }
 
+// GetKey performs a license exchange with an Apple-hosted Widevine license server.
+// It initiates the CDM, generates a Widevine-formatted license challenge,
+// and transmits it to the specified Apple HLS key server. Finally, it
+// extracts and returns the content decryption key from the server's response.
 func GetKey(pssh string, keyURI string, song *applemusic.WebPlaybackSong) ([]byte, error) {
 	initData, err := base64.StdEncoding.DecodeString(pssh)
 	if err != nil {
@@ -59,10 +68,10 @@ func GetKey(pssh string, keyURI string, song *applemusic.WebPlaybackSong) ([]byt
 			UserInitiated: true,
 			Challenge:     base64.StdEncoding.EncodeToString(challenge),
 			Uri:           keyURI,
-			KeySystem:     "com.widevine.alpha",
+			KeySystem:     SystemStringPrefix,
 		})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to request license from server: %w", err)
 	}
 	keys, err := module.GetLicenseKeys(challenge, license)
 	if err != nil {

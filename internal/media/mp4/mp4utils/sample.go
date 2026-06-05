@@ -60,27 +60,24 @@ func GetFullSamples(traf cmaf.TrackFragmentBox, mdat *mp4.Mdat, trex *mp4.Trex) 
 				SampleDescriptionIndex: func() uint32 {
 					if traf.Tfhd.CheckFlag(0x2) {
 						return traf.Tfhd.SampleDescriptionIndex
-					} else {
-						return trex.DefaultSampleDescriptionIndex
 					}
+					return trex.DefaultSampleDescriptionIndex
 				}(),
 				SampleDuration: func() uint32 {
 					if trun.CheckFlag(0x100) {
 						return entry.SampleDuration
 					} else if traf.Tfhd.CheckFlag(0x8) {
 						return traf.Tfhd.DefaultSampleDuration
-					} else {
-						return trex.DefaultSampleDuration
 					}
+					return trex.DefaultSampleDuration
 				}(),
 				SampleSize: func() uint32 {
 					if trun.CheckFlag(0x200) {
 						return entry.SampleSize
 					} else if traf.Tfhd.CheckFlag(0x10) {
 						return traf.Tfhd.DefaultSampleSize
-					} else {
-						return trex.DefaultSampleSize
 					}
+					return trex.DefaultSampleSize
 				}(),
 				SampleFlags: func() uint32 {
 					if trun.CheckFlag(0x4) {
@@ -89,9 +86,8 @@ func GetFullSamples(traf cmaf.TrackFragmentBox, mdat *mp4.Mdat, trex *mp4.Trex) 
 						return entry.SampleFlags
 					} else if traf.Tfhd.CheckFlag(0x20) {
 						return traf.Tfhd.DefaultSampleFlags
-					} else {
-						return trex.DefaultSampleFlags
 					}
+					return trex.DefaultSampleFlags
 				}(),
 			}
 			if trun.CheckFlag(0x800) {

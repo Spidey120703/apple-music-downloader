@@ -300,6 +300,7 @@ func (d *Downloader) DownloadSong(trackID string, ctx APIContext, fullPath FullP
 			if asset.Flavor == "28:ctrp256" {
 				params.MediaPlaylistURI = asset.URL
 				params.WebPlayback = ctx.MZPlay.WebPlayback
+				break
 			}
 		}
 	}

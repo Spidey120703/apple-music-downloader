@@ -61,8 +61,8 @@ type TrackBox struct {
 	}
 	Udta struct {
 		Ludt struct {
-			Tlou *mp4.LoudnessEntry
-			Alou *mp4.LoudnessEntry
+			Tlou *mp4.LoudnessBaseBox
+			Alou *mp4.LoudnessBaseBox
 		}
 	}
 	Node *boxtree.BoxNode
@@ -123,10 +123,15 @@ const (
 	MediaTypeVideo
 )
 
+var (
+	HandlerTypeVideo = [4]byte{'v', 'i', 'd', 'e'}
+	HandlerTypeSound = [4]byte{'s', 'o', 'u', 'n'}
+)
+
 func (isom *Header) GetMediaType() MediaType {
-	if slices.ContainsFunc(isom.Moov.Trak, func(box TrackBox) bool { return box.Mdia.Minf.Vmhd != nil }) {
+	if slices.ContainsFunc(isom.Moov.Trak, func(box TrackBox) bool { return box.Mdia.Hdlr.HandlerType == HandlerTypeVideo }) {
 		return MediaTypeVideo
-	} else if !slices.ContainsFunc(isom.Moov.Trak, func(box TrackBox) bool { return box.Mdia.Minf.Smhd == nil }) {
+	} else if slices.ContainsFunc(isom.Moov.Trak, func(box TrackBox) bool { return box.Mdia.Hdlr.HandlerType == HandlerTypeSound }) {
 		return MediaTypeAudio
 	}
 	return MediaTypeOther

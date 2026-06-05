@@ -73,6 +73,7 @@ func PostWebPlaybackLicense(url string, licenseRequest WebPlaybackLicenseRequest
 	if err != nil {
 		return nil, err
 	}
+	defer utils.CloseQuietly(do.Body)
 
 	response, err := io.ReadAll(do.Body)
 	if err != nil {

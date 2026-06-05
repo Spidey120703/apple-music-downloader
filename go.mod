@@ -3,7 +3,7 @@ module downloader
 go 1.25.0
 
 require (
-	github.com/Spidey120703/go-mp4 v0.0.0-20260520092339-885f6bab4047
+	github.com/Spidey120703/go-mp4 v0.0.0-20260605171131-8fdc14bd0fee
 	github.com/Spidey120703/hls-m3u8 v0.0.0-20260412221158-799fd30a12b7
 	github.com/aead/cmac v0.0.0-20160719120800-7af84192f0b1
 	github.com/beevik/etree v1.6.0

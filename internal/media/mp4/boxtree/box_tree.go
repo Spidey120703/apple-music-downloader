@@ -3,6 +3,7 @@ package boxtree
 import (
 	"errors"
 	"io"
+	"math"
 	"slices"
 	"strconv"
 	"strings"
@@ -51,20 +52,20 @@ func (n *BoxNode) P(path string) (forest []*BoxNode, err error) {
 	node := n
 	parts := strings.Split(strings.Trim(path, ". "), ".")
 	for _, p := range parts {
-		var idx = -1
-		if strings.Contains(p, "[") && strings.Contains(p, "]") {
-			buf := strings.Split(p, "[")
+		var idx = math.MinInt
+		if strings.Contains(p, "[") && strings.HasSuffix(p, "]") {
+			buf := strings.SplitN(p, "[", 2)
 			p = buf[0]
 			idx, err = strconv.Atoi(buf[1][:len(buf[1])-1])
 			if err != nil {
-				return
+				return nil, errors.New("invalid index for " + p)
 			}
 		}
 		nodes, found := node.Cache[mp4.StrToBoxType(p)]
 		if !found || len(nodes) == 0 {
 			return nil, errors.New("not found " + p)
 		}
-		if idx == -1 {
+		if idx == math.MinInt {
 			forest = nodes
 			node = nodes[0]
 		} else {
@@ -117,7 +118,7 @@ func (n *BoxNode) Append(boxType mp4.BoxType, box mp4.IBox) (err error) {
 	n.Children = append(n.Children, &BoxNode{
 		Info: &mp4.BoxInfo{Type: boxType},
 		Box:  box,
-		Path: ToAppendedPath(n.Path, boxType),
+		Path: JoinPath(n.Path, boxType),
 	})
 	err = n.Caching()
 	return
@@ -127,13 +128,13 @@ func (n *BoxNode) Insert(idx int, boxType mp4.BoxType, box mp4.IBox) (err error)
 	n.Children = slices.Insert(n.Children, idx, &BoxNode{
 		Info: &mp4.BoxInfo{Type: boxType},
 		Box:  box,
-		Path: ToAppendedPath(n.Path, boxType),
+		Path: JoinPath(n.Path, boxType),
 	})
 	err = n.Caching()
 	return
 }
 
-func ToAppendedPath(path mp4.BoxPath, boxType ...mp4.BoxType) (target mp4.BoxPath) {
+func JoinPath(path mp4.BoxPath, boxType ...mp4.BoxType) (target mp4.BoxPath) {
 	for _, p := range path {
 		target = append(target, p)
 	}

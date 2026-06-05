@@ -35,7 +35,7 @@ func (ctx *MuxHandler) initializeMux() (err error) {
 				}
 
 				for _, input := range inputs[1:] {
-					if _, err = entry.Muxer.MergeSegment(input); err != nil {
+					if _, err = entry.Muxer.AddSegment(input); err != nil {
 						return
 					}
 				}
@@ -105,6 +105,7 @@ func (ctx *MuxHandler) finalizeMux() (err error) {
 	if output, err = os.Create(ctx.TargetPath); err != nil {
 		return
 	}
+	defer utils.CloseQuietly(output)
 	return ctx.Muxer.Finalize(output)
 }
 

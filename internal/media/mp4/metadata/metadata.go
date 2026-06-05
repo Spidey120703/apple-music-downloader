@@ -166,7 +166,7 @@ func (m *Metadata) Attach(root *boxtree.BoxNode) (err error) {
 		header.Moov.Udta.Node = &boxtree.BoxNode{
 			Info: &mp4.BoxInfo{Type: mp4.BoxTypeUdta(), Context: mp4.Context{}},
 			Box:  &mp4.Udta{},
-			Path: boxtree.ToAppendedPath(header.Moov.Node.Path, mp4.BoxTypeUdta()),
+			Path: boxtree.JoinPath(header.Moov.Node.Path, mp4.BoxTypeUdta()),
 		}
 
 		// Insert udta into moov if it doesn't already exist.
@@ -187,24 +187,25 @@ func (m *Metadata) Attach(root *boxtree.BoxNode) (err error) {
 	meta := boxtree.BoxNode{
 		Info: &mp4.BoxInfo{Type: mp4.BoxTypeMeta(), Context: mp4.Context{UnderUdta: true}},
 		Box:  &mp4.Meta{},
-		Path: boxtree.ToAppendedPath(header.Moov.Udta.Node.Path, mp4.BoxTypeMeta()),
+		Path: boxtree.JoinPath(header.Moov.Udta.Node.Path, mp4.BoxTypeMeta()),
 	}
 
 	{
 		hdlr := boxtree.BoxNode{
 			Info: &mp4.BoxInfo{Type: mp4.BoxTypeHdlr(), Context: mp4.Context{UnderUdta: true}},
-			Box: &mp4.MetadataHandlerBox{
-				HandlerType: []byte{'m', 'd', 'i', 'r'},
-				Name:        []byte{'a', 'p', 'p', 'l'},
+			Box: &mp4.Hdlr{
+				HandlerType: [4]byte{'m', 'd', 'i', 'r'},
+				Reserved:    [3]uint32{0x6170706c},
+				Name:        "",
 			},
-			Path: boxtree.ToAppendedPath(meta.Path, mp4.BoxTypeHdlr()),
+			Path: boxtree.JoinPath(meta.Path, mp4.BoxTypeHdlr()),
 		}
 		meta.Children = append(meta.Children, &hdlr)
 
 		ilst := boxtree.BoxNode{
 			Info: &mp4.BoxInfo{Type: mp4.BoxTypeIlst(), Context: mp4.Context{UnderUdta: true}},
 			Box:  &mp4.Ilst{},
-			Path: boxtree.ToAppendedPath(meta.Path, mp4.BoxTypeIlst()),
+			Path: boxtree.JoinPath(meta.Path, mp4.BoxTypeIlst()),
 		}
 
 		if err = m.Walk(func(boxType mp4.BoxType, data *mp4.Data) (err error) {
@@ -215,13 +216,13 @@ func (m *Metadata) Attach(root *boxtree.BoxNode) (err error) {
 						Type: boxType,
 					},
 				},
-				Path: boxtree.ToAppendedPath(ilst.Path, boxType),
+				Path: boxtree.JoinPath(ilst.Path, boxType),
 			}
 
 			item.Children = append(item.Children, &boxtree.BoxNode{
 				Info: &mp4.BoxInfo{Type: mp4.BoxTypeData(), Context: mp4.Context{UnderUdta: true, UnderIlst: true, UnderIlstMeta: true}},
 				Box:  data,
-				Path: boxtree.ToAppendedPath(item.Path, mp4.BoxTypeData()),
+				Path: boxtree.JoinPath(item.Path, mp4.BoxTypeData()),
 			})
 			if err = item.Caching(); err != nil {
 				return
@@ -241,7 +242,7 @@ func (m *Metadata) Attach(root *boxtree.BoxNode) (err error) {
 		meta.Children = append(meta.Children, &boxtree.BoxNode{
 			Info: &mp4.BoxInfo{Type: mp4.BoxTypeFree(), Context: mp4.Context{UnderUdta: true}},
 			Box:  &mp4.Free{},
-			Path: boxtree.ToAppendedPath(meta.Path, mp4.BoxTypeFree()),
+			Path: boxtree.JoinPath(meta.Path, mp4.BoxTypeFree()),
 		})
 	}
 

@@ -78,8 +78,8 @@ func (ctx *MuxContext) Initialize(input io.ReadSeeker) (err error) {
 	return
 }
 
-func (ctx *MuxContext) MergeSegment(input io.ReadSeeker) (seg *cmaf.Segment, err error) {
-	seg, err = ctx.Context.MergeSegment(input)
+func (ctx *MuxContext) AddSegment(input io.ReadSeeker) (seg *cmaf.Segment, err error) {
+	seg, err = ctx.Context.AddSegment(input)
 	if err != nil {
 		return
 	}
@@ -339,6 +339,8 @@ func (ctx *MuxContext) Desegmentize() (err error) {
 
 	var offset uint64
 	counter := utils.NewNullWriter()
+	defer utils.CloseQuietly(counter)
+
 	if offset, err = boxtree.Marshal(counter, ctx.Root); err != nil {
 		return
 	}
@@ -404,6 +406,7 @@ func (ctx *MuxContext) MuxTrack(other *MuxContext) (err error) {
 
 	var offset uint64
 	counter := utils.NewNullWriter()
+	defer utils.CloseQuietly(counter)
 	{ // other's moov.trak.mdia.minf.stbl.stco
 		if offset, err = boxtree.Marshal(counter, ctx.Root); err != nil {
 			return

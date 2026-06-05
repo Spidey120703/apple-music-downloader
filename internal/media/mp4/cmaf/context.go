@@ -10,7 +10,7 @@ import (
 type IContext interface {
 	Initialize(io.ReadSeeker) error
 	Finalize(io.WriteSeeker) error
-	MergeSegment(io.ReadSeeker) (*Segment, error)
+	AddSegment(io.ReadSeeker) (*Segment, error)
 	GetRoot() *boxtree.BoxNode
 }
 
@@ -40,7 +40,7 @@ func (ctx *Context) Finalize(output io.WriteSeeker) (err error) {
 	return
 }
 
-func (ctx *Context) MergeSegment(input io.ReadSeeker) (seg *Segment, err error) {
+func (ctx *Context) AddSegment(input io.ReadSeeker) (seg *Segment, err error) {
 	var root *boxtree.BoxNode
 	if root, err = boxtree.UnmarshalWithContext(input, ctx.mp4Context); err != nil {
 		return

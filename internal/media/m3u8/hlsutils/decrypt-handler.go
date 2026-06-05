@@ -44,7 +44,7 @@ func (ctx *DecryptHandler) getKeys(entry *MediaPlaylistEntry) (keys [][]byte, dr
 			} else if strings.HasPrefix(keyURI, "data:;base64,") {
 				keyBase64 = keyURI[len("data:;base64,"):]
 			}
-			if pssh, err = widevine.GetPSSH("", keyBase64); err != nil {
+			if pssh, err = widevine.GeneratePSSH("", keyBase64); err != nil {
 				return
 			}
 			if key, err = widevine.GetKey(pssh, keyURI, ctx.WebPlayback); err != nil {
@@ -96,7 +96,7 @@ func (ctx *DecryptHandler) decryptEntry(entry *MediaPlaylistEntry) (err error) {
 
 	var seg *cmaf.Segment
 	for _, input := range inputs[1:] {
-		if seg, err = entry.Decryptor.MergeSegment(input); err != nil {
+		if seg, err = entry.Decryptor.AddSegment(input); err != nil {
 			return
 		}
 		if err = entry.Decryptor.DecryptSegment(seg, keys); err != nil {

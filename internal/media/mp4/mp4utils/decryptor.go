@@ -3,7 +3,6 @@ package mp4utils
 import (
 	"downloader/internal/media/mp4/cmaf"
 	"errors"
-	"fmt"
 	"io"
 
 	"github.com/Spidey120703/go-mp4"
@@ -107,17 +106,17 @@ func (ctx *DecryptContext) Finalize(output io.WriteSeeker) (err error) {
 	return ctx.Context.Finalize(output)
 }
 
-type TrackCryptoInfo struct {
+type TrackCryptInfo struct {
 	Sinf *cmaf.ProtectionSchemeInformationBox
 	Trex *mp4.Trex
 	Pssh []*mp4.Pssh
 }
 
-func (t *TrackCryptoInfo) IsEncrypted() bool {
+func (t *TrackCryptInfo) IsEncrypted() bool {
 	return t.Sinf != nil
 }
 
-func (ctx *DecryptContext) GetTrackCryptoInfo(trackID uint32) (info TrackCryptoInfo, err error) {
+func (ctx *DecryptContext) GetTrackCryptInfo(trackID uint32) (info TrackCryptInfo, err error) {
 	for _, trak := range ctx.Header.Moov.Trak {
 		if trak.Tkhd.TrackID == trackID {
 			for _, entry := range trak.Mdia.Minf.Stbl.Stsd.Entries {
@@ -138,28 +137,27 @@ func (ctx *DecryptContext) DecryptFragment(moof cmaf.MovieFragmentBox, mdat *mp4
 	var totalDeleted, size uint64
 	if size, err = moof.Node.Remove(mp4.BoxTypePssh()); err != nil {
 		return
-	} else {
-		totalDeleted += size
 	}
+	totalDeleted += size
+
 	var samples []Sample
 	for _, traf := range moof.Traf {
-		var cryptoInfo TrackCryptoInfo
-		if cryptoInfo, err = ctx.GetTrackCryptoInfo(traf.Tfhd.TrackID); err != nil {
+		var cryptInfo TrackCryptInfo
+		if cryptInfo, err = ctx.GetTrackCryptInfo(traf.Tfhd.TrackID); err != nil {
 			return
 		}
-		samples = GetFullSamples(traf, mdat, cryptoInfo.Trex)
-		if !cryptoInfo.IsEncrypted() {
-			ctx.Samples[traf.Tfhd.TrackID] = append(ctx.Samples[traf.Tfhd.TrackID], samples...)
-			continue
+
+		samples = GetFullSamples(traf, mdat, cryptInfo.Trex)
+
+		if cryptInfo.IsEncrypted() {
+			schemeType := string(cryptInfo.Sinf.Schm.SchemeType[:])
+			if err = ctx.DecryptSample(schemeType, samples, cryptInfo.Sinf.Schi.Tenc, traf.Senc, keys); err != nil {
+				return
+			}
 		}
-		schemeType := string(cryptoInfo.Sinf.Schm.SchemeType[:])
-		if schemeType != "cbcs" && schemeType != "cenc" {
-			return fmt.Errorf("unsupported scheme type: %s", schemeType)
-		}
-		if err = ctx.DecryptSample(schemeType, samples, cryptoInfo.Sinf.Schi.Tenc, traf.Senc, keys); err != nil {
-			return
-		}
+
 		ctx.Samples[traf.Tfhd.TrackID] = append(ctx.Samples[traf.Tfhd.TrackID], samples...)
+
 		for _, boxType := range []mp4.BoxType{
 			mp4.BoxTypeSaiz(),
 			mp4.BoxTypeSaio(),
