@@ -1,4 +1,4 @@
-package widevine
+package lagacy
 
 import (
 	"crypto/aes"
@@ -7,7 +7,7 @@ import (
 	"github.com/Spidey120703/go-mp4"
 )
 
-func censCrypt(stream cipher.Stream, sample []byte, numInCryptByte, numInSkipByte int) (err error) {
+func censCrypt(stream cipher.Stream, sample []byte, numInCryptByte, numInSkipByte int) (offset int, err error) {
 	var size = len(sample)
 
 	if numInSkipByte == 0 {
@@ -21,10 +21,13 @@ func censCrypt(stream cipher.Stream, sample []byte, numInCryptByte, numInSkipByt
 		stream.XORKeyStream(sample[pos:pos+numInCryptByte], sample[pos:pos+numInCryptByte])
 		pos += numInCryptByte
 		if size-pos < numInSkipByte {
+			offset = numInSkipByte - size + pos
 			return
 		}
 		pos += numInSkipByte
 	}
+
+	offset = min(pos-size, 0)
 
 	return
 }
@@ -45,19 +48,23 @@ func CryptSampleCens(data, key, iv []byte, subsampleEntries []mp4.SubsampleEntry
 	stream := cipher.NewCTR(block, iv)
 
 	if len(subsampleEntries) != 0 {
+		var offset int
 		var pos uint32
 		for _, subsampleEntry := range subsampleEntries {
 			pos += uint32(subsampleEntry.BytesOfClearData)
 			if subsampleEntry.BytesOfProtectedData == 0 {
 				continue
 			}
-			if err = censCrypt(stream, data[pos:pos+subsampleEntry.BytesOfProtectedData], numInCryptByte, numInSkipByte); err != nil {
+			if int(pos)+offset >= len(data) {
+				break
+			}
+			if offset, err = censCrypt(stream, data[int(pos)+offset:pos+subsampleEntry.BytesOfProtectedData], numInCryptByte, numInSkipByte); err != nil {
 				return
 			}
 			pos += subsampleEntry.BytesOfProtectedData
 		}
 	} else {
-		if err = censCrypt(stream, data, numInCryptByte, numInSkipByte); err != nil {
+		if _, err = censCrypt(stream, data, numInCryptByte, numInSkipByte); err != nil {
 			return
 		}
 	}

@@ -27,7 +27,7 @@ func loadToken() (string, error) {
 	regex := regexp.MustCompile(`src="(/assets/index-legacy[-~][0-9a-f]{8,10}\.js)"`)
 	submatcheds := regex.FindAllSubmatch(body, 2)
 
-	var token = ""
+	var token string
 
 	regex = regexp.MustCompile(`="(eyJh[0-9A-Za-z\-_]+={0,2}\.[0-9A-Za-z\-_]+={0,2}\.[0-9A-Za-z\-_]+={0,2})"`)
 	for _, submatched := range submatcheds {
@@ -37,11 +37,13 @@ func loadToken() (string, error) {
 		}
 		body, err := io.ReadAll(resp.Body)
 		if err != nil {
+			_ = resp.Body.Close()
 			return "", err
 		}
 
 		if temp := regex.FindStringSubmatch(string(body)); len(temp) != 0 {
 			token = temp[1]
+			_ = resp.Body.Close()
 			break
 		}
 

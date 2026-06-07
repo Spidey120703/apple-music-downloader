@@ -511,9 +511,9 @@ func main() {
 	//amURL := "https://music.apple.com/cn/album/dispatch-vol-3-original-soundtrack/1858897742"
 	//amURL := "https://music.apple.com/cn/album/dispatch-vol-4-original-soundtrack/1858902822"
 	//amURL := "https://music.apple.com/cn/album/radio/1640300198?i=1640300200"
-	//amURL := "https://music.apple.com/cn/music-video/making-the-record/1446022245?l=en-GB"
+	amURL := "https://music.apple.com/cn/music-video/making-the-record/1446022245?l=en-GB"
 	//amURL := "https://music.apple.com/cn/album/feel-the-way-i-do/1599218112?i=1599218120"
-	amURL := "https://music.apple.com/cn/album/kissing-someone-else/1533848159?i=1533848809"
+	//amURL := "https://music.apple.com/cn/album/kissing-someone-else/1533848159?i=1533848809"
 	//amURL := "https://music.apple.com/cn/album/%E6%A2%A6%E9%BE%99-loom-tour-2026-%E4%B8%AD%E5%9B%BD%E5%B7%A1%E6%BC%94%E7%89%B9%E5%88%AB%E7%89%88/1879820916?l=en-GB&ls"
 
 	amDownloader := Downloader{

@@ -1,4 +1,4 @@
-package widevine
+package lagacy
 
 import (
 	"crypto/aes"
@@ -10,14 +10,14 @@ import (
 
 /*************************** CBCS ****************************/
 
-type CryptMode int
+type CryptDirection int
 
 const (
-	ModeEncrypt CryptMode = iota
-	ModeDecrypt
+	DirEncrypt CryptDirection = iota
+	DirDecrypt
 )
 
-func CryptSampleCbcs(cm CryptMode, data, key, iv []byte, subsampleEntries []mp4.SubsampleEntry, cryptByteBlock, skipByteBlock uint8) (err error) {
+func CryptSampleCbcs(dir CryptDirection, data, key, iv []byte, subsampleEntries []mp4.SubsampleEntry, cryptByteBlock, skipByteBlock uint8) (err error) {
 	numInCryptByte := int(cryptByteBlock) << 4
 	numInSkipByte := int(skipByteBlock) << 4
 
@@ -28,33 +28,33 @@ func CryptSampleCbcs(cm CryptMode, data, key, iv []byte, subsampleEntries []mp4.
 			if subsampleEntry.BytesOfProtectedData == 0 {
 				continue
 			}
-			if err = cbcsCrypt(cm, data[pos:pos+subsampleEntry.BytesOfProtectedData], key, iv, numInCryptByte, numInSkipByte); err != nil {
+			if err = cbcsCrypt(dir, data[pos:pos+subsampleEntry.BytesOfProtectedData], key, iv, numInCryptByte, numInSkipByte); err != nil {
 				return
 			}
 			pos += subsampleEntry.BytesOfProtectedData
 		}
 	} else {
-		if err = cbcsCrypt(cm, data, key, iv, numInCryptByte, numInSkipByte); err != nil {
+		if err = cbcsCrypt(dir, data, key, iv, numInCryptByte, numInSkipByte); err != nil {
 			return
 		}
 	}
 	return
 }
 
-func cbcsCrypt(cm CryptMode, sample, key, iv []byte, numInCryptByte, numInSkipByte int) (err error) {
+func cbcsCrypt(dir CryptDirection, sample, key, iv []byte, numInCryptByte, numInSkipByte int) (err error) {
 	var block cipher.Block
 	if block, err = aes.NewCipher(key); err != nil {
 		return
 	}
 
 	var mode cipher.BlockMode
-	switch cm {
-	case ModeEncrypt:
+	switch dir {
+	case DirEncrypt:
 		mode = cipher.NewCBCEncrypter(block, iv)
-	case ModeDecrypt:
+	case DirDecrypt:
 		mode = cipher.NewCBCDecrypter(block, iv)
 	default:
-		return fmt.Errorf("unknown crypto action mode: %d", cm)
+		return fmt.Errorf("unknown crypto action mode: %d", dir)
 	}
 
 	var size = len(sample)
@@ -82,12 +82,12 @@ func EncryptSampleCbcs(data, key, iv []byte, subsampleEntries []mp4.SubsampleEnt
 	if cryptByteBlock == 0 && skipByteBlock == 0 {
 		return EncryptSampleCbc1(data, key, iv, subsampleEntries)
 	}
-	return CryptSampleCbcs(ModeEncrypt, data, key, iv, subsampleEntries, cryptByteBlock, skipByteBlock)
+	return CryptSampleCbcs(DirEncrypt, data, key, iv, subsampleEntries, cryptByteBlock, skipByteBlock)
 }
 
 func DecryptSampleCbcs(data, key, iv []byte, subsampleEntries []mp4.SubsampleEntry, cryptByteBlock, skipByteBlock uint8) error {
 	if cryptByteBlock == 0 && skipByteBlock == 0 {
 		return DecryptSampleCbc1(data, key, iv, subsampleEntries)
 	}
-	return CryptSampleCbcs(ModeDecrypt, data, key, iv, subsampleEntries, cryptByteBlock, skipByteBlock)
+	return CryptSampleCbcs(DirDecrypt, data, key, iv, subsampleEntries, cryptByteBlock, skipByteBlock)
 }

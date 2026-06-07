@@ -12,7 +12,7 @@ type Decryptor struct {
 
 func New() *Decryptor {
 	d := &Decryptor{}
-	d.Sub = d
+	d.ISampleDecryptor = d
 	return d
 }
 

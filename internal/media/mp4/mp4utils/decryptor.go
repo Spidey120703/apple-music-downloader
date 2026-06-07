@@ -2,11 +2,20 @@ package mp4utils
 
 import (
 	"downloader/internal/media/mp4/cmaf"
-	"errors"
 	"io"
 
 	"github.com/Spidey120703/go-mp4"
 )
+
+type TrackCryptInfo struct {
+	Sinf *cmaf.ProtectionSchemeInformationBox
+	Trex *mp4.Trex
+	Pssh []*mp4.Pssh
+}
+
+func (t *TrackCryptInfo) IsEncrypted() bool {
+	return t.Sinf != nil
+}
 
 type IDecryptor interface {
 	cmaf.IContext
@@ -14,12 +23,15 @@ type IDecryptor interface {
 	DecryptHeader([][]byte) error
 	DecryptSegment(*cmaf.Segment, [][]byte) error
 	DecryptFragment(cmaf.MovieFragmentBox, *mp4.Mdat, [][]byte) error
+}
+
+type ISampleDecryptor interface {
 	DecryptSample(string, []Sample, *mp4.Tenc, *mp4.Senc, [][]byte) error
 }
 
 type DecryptContext struct {
 	cmaf.Context
-	Sub     IDecryptor
+	ISampleDecryptor
 	Samples map[uint32][]Sample
 }
 
@@ -28,6 +40,31 @@ func (ctx *DecryptContext) Initialize(input io.ReadSeeker) (err error) {
 		ctx.Samples = make(map[uint32][]Sample)
 	}
 	return ctx.Context.Initialize(input)
+}
+
+func (ctx *DecryptContext) Finalize(output io.WriteSeeker) (err error) {
+	return ctx.Context.Finalize(output)
+}
+
+func (ctx *DecryptContext) GetTrackCryptInfo(trackID uint32) (info TrackCryptInfo, err error) {
+	for _, trak := range ctx.Header.Moov.Trak {
+		if trak.Tkhd.TrackID == trackID {
+			for _, entry := range trak.Mdia.Minf.Stbl.Stsd.Entries {
+				info.Sinf = entry.Sinf
+			}
+		}
+	}
+	for _, trex := range ctx.Header.Moov.Mvex.Trex {
+		if trex.TrackID == trackID {
+			info.Trex = trex
+		}
+	}
+	info.Pssh = ctx.Header.Moov.Pssh
+	return
+}
+
+func (ctx *DecryptContext) GetSamples() map[uint32][]Sample {
+	return ctx.Samples
 }
 
 func (ctx *DecryptContext) DecryptHeader(keys [][]byte) (err error) {
@@ -102,37 +139,6 @@ func (ctx *DecryptContext) DecryptSegment(seg *cmaf.Segment, keys [][]byte) (err
 	return
 }
 
-func (ctx *DecryptContext) Finalize(output io.WriteSeeker) (err error) {
-	return ctx.Context.Finalize(output)
-}
-
-type TrackCryptInfo struct {
-	Sinf *cmaf.ProtectionSchemeInformationBox
-	Trex *mp4.Trex
-	Pssh []*mp4.Pssh
-}
-
-func (t *TrackCryptInfo) IsEncrypted() bool {
-	return t.Sinf != nil
-}
-
-func (ctx *DecryptContext) GetTrackCryptInfo(trackID uint32) (info TrackCryptInfo, err error) {
-	for _, trak := range ctx.Header.Moov.Trak {
-		if trak.Tkhd.TrackID == trackID {
-			for _, entry := range trak.Mdia.Minf.Stbl.Stsd.Entries {
-				info.Sinf = entry.Sinf
-			}
-		}
-	}
-	for _, trex := range ctx.Header.Moov.Mvex.Trex {
-		if trex.TrackID == trackID {
-			info.Trex = trex
-		}
-	}
-	info.Pssh = ctx.Header.Moov.Pssh
-	return
-}
-
 func (ctx *DecryptContext) DecryptFragment(moof cmaf.MovieFragmentBox, mdat *mp4.Mdat, keys [][]byte) (err error) {
 	var totalDeleted, size uint64
 	if size, err = moof.Node.Remove(mp4.BoxTypePssh()); err != nil {
@@ -167,9 +173,9 @@ func (ctx *DecryptContext) DecryptFragment(moof cmaf.MovieFragmentBox, mdat *mp4
 		} {
 			if size, err = traf.Node.Remove(boxType); err != nil {
 				return
-			} else {
-				totalDeleted += size
 			}
+
+			totalDeleted += size
 		}
 	}
 	for _, traf := range moof.Traf {
@@ -178,15 +184,4 @@ func (ctx *DecryptContext) DecryptFragment(moof cmaf.MovieFragmentBox, mdat *mp4
 		}
 	}
 	return
-}
-
-func (ctx *DecryptContext) DecryptSample(schemeType string, samples []Sample, tenc *mp4.Tenc, senc *mp4.Senc, keys [][]byte) error {
-	if ctx.Sub == nil {
-		panic(errors.New("DecryptSample not implemented"))
-	}
-	return ctx.Sub.DecryptSample(schemeType, samples, tenc, senc, keys)
-}
-
-func (ctx *DecryptContext) GetSamples() map[uint32][]Sample {
-	return ctx.Samples
 }

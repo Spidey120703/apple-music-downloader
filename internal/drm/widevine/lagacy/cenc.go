@@ -1,4 +1,4 @@
-package widevine
+package lagacy
 
 import (
 	"crypto/aes"

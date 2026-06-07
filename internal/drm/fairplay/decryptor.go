@@ -13,9 +13,10 @@ type Decryptor struct {
 }
 
 func New(adamID string) *Decryptor {
-	d := &Decryptor{}
-	d.Sub = d
-	d.AdamID = adamID
+	d := &Decryptor{
+		AdamID: adamID,
+	}
+	d.ISampleDecryptor = d
 	return d
 }
 
